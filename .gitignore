@@ -5,3 +5,6 @@ node_modules
 frontend/build/
 __pycache__/
 *.pyc
+# scraper output artifacts (kayak_direct.py <IATA>_direct.json etc.)
+*_direct.json
+flights.json

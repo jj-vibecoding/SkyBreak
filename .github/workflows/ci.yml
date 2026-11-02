@@ -23,7 +23,7 @@ jobs:
 
       - name: Build frontend
         run: |
-          cd frontend && npm ci && npm run build || echo "Frontend build skipped due to compatibility issues, tests will still validate backend functionality"
+          cd frontend && npm ci && npm run build
 
       - name: Run tests
         run: |
