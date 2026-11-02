@@ -64,9 +64,12 @@ export default function FavoriteTripPrices() {
   // Gruppierung nach Ziel (analog turnarounds)
   const groupsObj = {};
   prices.forEach(p => { const key = p.destination_airport || p.dest_city_country || '-'; if (!groupsObj[key]) groupsObj[key] = []; groupsObj[key].push(p); });
+  // A→Z sortiert nach Stadtname, nicht nach IATA-Code
+  const groupNames = {};
+  Object.keys(groupsObj).forEach(k => { groupNames[k] = (groupsObj[k][0]?.dest_city_country || k); });
   const groupKeys = Object.keys(groupsObj).sort((a, b) => {
     if (groupSortKey === 'name') {
-      return groupSortDir === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+      return groupSortDir === 'asc' ? groupNames[a].localeCompare(groupNames[b]) : groupNames[b].localeCompare(groupNames[a]);
     }
     // price_min: cheapest trip in each group first/last, nulls last
     const minA = groupsObj[a].reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
