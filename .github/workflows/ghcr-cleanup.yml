@@ -35,11 +35,22 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          PKG="${GITHUB_REPOSITORY##*/}"
-          echo "Repo: $REPO  Package: $PKG"
+          OWNER="${REPO%%/*}"
+          # GHCR package names are always lowercase, even if the repo name is not.
+          PKG="$(echo "${REPO##*/}" | tr '[:upper:]' '[:lower:]')"
+          # Container package endpoints are namespace-scoped (users/orgs),
+          # NOT repo-scoped: /repos/{owner}/{repo}/packages/container/... returns 404.
+          if [ "$(curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO" | jq -r '.owner.type')" = "Organization" ]; then
+            NS="orgs"
+          else
+            NS="users"
+          fi
+          API="https://api.github.com/$NS/$OWNER/packages/container/$PKG"
+          echo "Repo: $REPO  Package: $PKG  (namespace: $NS/$OWNER)"
           # Fetch all package versions with their tags.
           curl -sSL -f -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$REPO/packages/container/$PKG/versions" \
+            "$API/versions" \
             -o /tmp/versions.json
           echo "Versions fetched: $(jq 'length' /tmp/versions.json)"
 
@@ -57,7 +68,7 @@ jobs:
             fi
             code=$(curl -sSL -o /dev/null -w "%{http_code}" -X DELETE \
               -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/$REPO/packages/container/$PKG/versions/$vid")
+              "$API/versions/$vid")
             echo "DELETE version $vid (tags: $tags) http=$code"
             # GH accepts a version delete async (202) or immediately (204).
             if [ "$code" != "202" ] && [ "$code" != "204" ]; then
