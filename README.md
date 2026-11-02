@@ -12,7 +12,7 @@ A tool for planning short trips and weekend getaways by air.
 
 ## Quick Start
 ```bash
-git clone https://github.com/Julian-VibeCoder/SkyBreak.git
+git clone https://github.com/jj-vibecoding/SkyBreak.git
 cd SkyBreak
 npm install
 npm start

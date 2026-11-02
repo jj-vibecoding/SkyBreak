@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   flightbreak:
-    image: ghcr.io/julian-vibecoder/skybreak:main
+    image: ghcr.io/jj-vibecoding/skybreak:main
     volumes:    ["/opt/skybreak/:/data/"]
     ports: ["8088:80"]
     command: python -m flask --app skybreak/app run --host=0.0.0.0 --port=80
