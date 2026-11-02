@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatTripDateTime } from '../utils/format';
+import { useTripConfigs } from '../hooks/useTripConfigs';
 
 const sectionStyle = {
   background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
@@ -14,6 +15,18 @@ const controlStyle = {
   width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
   background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14,
   boxSizing: 'border-box', maxWidth: '100%',
+};
+const saveButtonStyle = {
+  padding: '8px 14px', borderRadius: 8, border: 'none', background: '#10b981',
+  color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+};
+const loadButtonStyle = {
+  padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8',
+  color: '#0f172a', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+};
+const deleteButtonStyle = {
+  padding: '8px 14px', borderRadius: 8, border: 'none', background: '#ef4444',
+  color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -47,6 +60,58 @@ export default function TripsTab({ list, airportNames }) {
   const [turnarounds, setTurnarounds] = useState([]);
   const [expanded, setExpanded] = useState({});
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
+
+  // Saved search configurations (browser localStorage only — no airport/date fields).
+  const { configs: savedConfigs, saveConfig, removeConfig } = useTripConfigs();
+  const [configName, setConfigName] = useState('');
+  const [selectedConfig, setSelectedConfig] = useState('');
+  const [configMessage, setConfigMessage] = useState('');
+
+  const currentSearch = {
+    startWeekdays, endWeekdays, maxDepToDest, minRetDep, minTripDays, maxTripDays,
+  };
+
+  const handleSaveConfig = () => {
+    if (!configName.trim()) { setConfigMessage('Please enter a name for the configuration.'); return; }
+    if (startWeekdays.length === 0 || endWeekdays.length === 0) {
+      setConfigMessage('Select at least one start and one end weekday before saving.');
+      return;
+    }
+    const existing = savedConfigs.find(c => c.name.toLowerCase() === configName.trim().toLowerCase());
+    if (existing && !confirm(`Configuration "${configName.trim()}" already exists. Overwrite it?`)) {
+      setConfigMessage('Overwrite cancelled — nothing was saved.');
+      return;
+    }
+    const result = saveConfig({ name: configName.trim(), ...currentSearch });
+    if (result.ok) {
+      setSelectedConfig(result.name);
+      setConfigName('');
+      setConfigMessage(`Configuration "${result.name}" saved.`);
+    } else {
+      setConfigMessage(result.error || 'Could not save the configuration.');
+    }
+  };
+
+  const handleLoadConfig = () => {
+    const config = savedConfigs.find(c => c.name === selectedConfig);
+    if (!config) { setConfigMessage('Select a configuration to load.'); return; }
+    setStartWeekdays(config.startWeekdays);
+    setEndWeekdays(config.endWeekdays);
+    if (config.maxDepToDest) setMaxDepToDest(config.maxDepToDest);
+    if (config.minRetDep) setMinRetDep(config.minRetDep);
+    if (config.minTripDays) setMinTripDays(config.minTripDays);
+    if (config.maxTripDays) setMaxTripDays(config.maxTripDays);
+    // Airport and date range are intentionally NOT part of a configuration.
+    setConfigMessage(`Loaded "${config.name}" — airport and dates kept as they were.`);
+  };
+
+  const handleDeleteConfig = () => {
+    if (!selectedConfig) { setConfigMessage('Select a configuration to delete.'); return; }
+    if (!confirm(`Delete configuration "${selectedConfig}"?`)) { setConfigMessage('Delete cancelled.'); return; }
+    removeConfig(selectedConfig);
+    setSelectedConfig('');
+    setConfigMessage(`Configuration "${selectedConfig}" deleted.`);
+  };
 
   useEffect(() => {
     if (tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep && maxTripDays && minTripDays) {
@@ -142,6 +207,27 @@ export default function TripsTab({ list, airportNames }) {
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Max Trip Length (days)</label>
           <input type="number" min={1} max={30} value={maxTripDays} onChange={e => setMaxTripDays(parseInt(e.target.value) || 1)} style={controlStyle} />
         </div>
+      </div>
+
+      <div style={{ ...fieldStyle, marginBottom: 18 }}>
+        <h4 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Saved Search Configs</h4>
+        <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 12px' }}>
+          Save the current weekdays, times and trip length under a name. Airport and date range are not saved; they stay as set when loading. Stored in this browser only.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <input type="text" value={configName} onChange={e => setConfigName(e.target.value)} placeholder="Configuration name"
+            style={{ ...controlStyle, maxWidth: 260 }} />
+          <button onClick={handleSaveConfig} style={saveButtonStyle}>Save current search</button>
+          <select value={selectedConfig} onChange={e => setSelectedConfig(e.target.value)} style={{ ...controlStyle, maxWidth: 220 }}>
+            <option value="">Select saved config…</option>
+            {savedConfigs.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+          </select>
+          <button onClick={handleLoadConfig} style={loadButtonStyle}>Load</button>
+          <button onClick={handleDeleteConfig} style={deleteButtonStyle}>Delete</button>
+        </div>
+        {configMessage && (
+          <p style={{ color: '#fbbf24', fontSize: 12, margin: '10px 0 0' }}>{configMessage}</p>
+        )}
       </div>
 
       {turnarounds.length > 0 && (
