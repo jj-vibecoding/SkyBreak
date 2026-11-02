@@ -8,6 +8,8 @@ export default function FavoriteTripPrices() {
   const [progress, setProgress] = useState(false);
   const [sortKey, setSortKey] = useState('price_total');
   const [sortDir, setSortDir] = useState('desc');
+  const [groupSortKey, setGroupSortKey] = useState('name');
+  const [groupSortDir, setGroupSortDir] = useState('asc');
   const [chartOpen, setChartOpen] = useState(false);
   const [chartData, setChartData] = useState(null);
   const [expanded, setExpanded] = useState({});
@@ -62,7 +64,18 @@ export default function FavoriteTripPrices() {
   // Gruppierung nach Ziel (analog turnarounds)
   const groupsObj = {};
   prices.forEach(p => { const key = p.destination_airport || p.dest_city_country || '-'; if (!groupsObj[key]) groupsObj[key] = []; groupsObj[key].push(p); });
-  const groupKeys = Object.keys(groupsObj).sort();
+  const groupKeys = Object.keys(groupsObj).sort((a, b) => {
+    if (groupSortKey === 'name') {
+      return groupSortDir === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+    }
+    // price_min: cheapest trip in each group first/last, nulls last
+    const minA = groupsObj[a].reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
+    const minB = groupsObj[b].reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
+    if (minA == null && minB == null) return 0;
+    if (minA == null) return 1;
+    if (minB == null) return -1;
+    return groupSortDir === 'asc' ? minA - minB : minB - minA;
+  });
 
   return (
     <div>
@@ -72,6 +85,12 @@ export default function FavoriteTripPrices() {
           <input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
           <input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
           <button onClick={() => { setFilterStart(''); setFilterEnd(''); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#475569', color:'#f8fafc', fontSize:11, cursor:'pointer' }}>Clear</button>
+        </div>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom: 8, alignItems:'center' }}>
+          <label style={{ color:'#94a3b8', fontSize:12, marginRight:4 }}>Sort groups:</label>
+          <button onClick={() => { setGroupSortKey('name'); setGroupSortDir('asc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='name' && groupSortDir==='asc' ? '#38bdf8' : '#475569', color: groupSortKey==='name' && groupSortDir==='asc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>A→Z</button>
+          <button onClick={() => { setGroupSortKey('price_min'); setGroupSortDir('asc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='price_min' && groupSortDir==='asc' ? '#38bdf8' : '#475569', color: groupSortKey==='price_min' && groupSortDir==='asc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>Price ↑</button>
+          <button onClick={() => { setGroupSortKey('price_min'); setGroupSortDir('desc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='price_min' && groupSortDir==='desc' ? '#38bdf8' : '#475569', color: groupSortKey==='price_min' && groupSortDir==='desc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>Price ↓</button>
         </div>
         <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8, marginRight: 10 }}>
           {progress || updating ? 'Updating prices... (running)' : 'Update all prices'}
