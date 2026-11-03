@@ -61,8 +61,9 @@ export default function TripsTab({ list, airportNames }) {
   const [expanded, setExpanded] = useState({});
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
 
-  // Saved search configurations (browser localStorage only — no airport/date fields).
-  const { configs: savedConfigs, saveConfig, removeConfig } = useTripConfigs();
+  // Saved search configs live in the server DB (shared by every browser);
+  // they never include the airport selection or the date range.
+  const { configs: savedConfigs, loading: configsLoading, error: configsError, saveConfig, removeConfig } = useTripConfigs();
   const [configName, setConfigName] = useState('');
   const [selectedConfig, setSelectedConfig] = useState('');
   const [configMessage, setConfigMessage] = useState('');
@@ -71,7 +72,7 @@ export default function TripsTab({ list, airportNames }) {
     startWeekdays, endWeekdays, maxDepToDest, minRetDep, minTripDays, maxTripDays,
   };
 
-  const handleSaveConfig = () => {
+  const handleSaveConfig = async () => {
     if (!configName.trim()) { setConfigMessage('Please enter a name for the configuration.'); return; }
     if (startWeekdays.length === 0 || endWeekdays.length === 0) {
       setConfigMessage('Select at least one start and one end weekday before saving.');
@@ -82,11 +83,11 @@ export default function TripsTab({ list, airportNames }) {
       setConfigMessage('Overwrite cancelled — nothing was saved.');
       return;
     }
-    const result = saveConfig({ name: configName.trim(), ...currentSearch });
+    const result = await saveConfig({ name: configName.trim(), ...currentSearch });
     if (result.ok) {
       setSelectedConfig(result.name);
       setConfigName('');
-      setConfigMessage(`Configuration "${result.name}" saved.`);
+      setConfigMessage(`Configuration "${result.name}" saved — visible in every browser.`);
     } else {
       setConfigMessage(result.error || 'Could not save the configuration.');
     }
@@ -105,12 +106,14 @@ export default function TripsTab({ list, airportNames }) {
     setConfigMessage(`Loaded "${config.name}" — airport and dates kept as they were.`);
   };
 
-  const handleDeleteConfig = () => {
+  const handleDeleteConfig = async () => {
     if (!selectedConfig) { setConfigMessage('Select a configuration to delete.'); return; }
     if (!confirm(`Delete configuration "${selectedConfig}"?`)) { setConfigMessage('Delete cancelled.'); return; }
-    removeConfig(selectedConfig);
+    const result = await removeConfig(selectedConfig);
     setSelectedConfig('');
-    setConfigMessage(`Configuration "${selectedConfig}" deleted.`);
+    setConfigMessage(result.ok
+      ? `Configuration "${selectedConfig}" deleted.`
+      : (result.error || 'Could not delete the configuration.'));
   };
 
   useEffect(() => {
@@ -212,19 +215,22 @@ export default function TripsTab({ list, airportNames }) {
       <div style={{ ...fieldStyle, marginBottom: 18 }}>
         <h4 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Saved Search Configs</h4>
         <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 12px' }}>
-          Save the current weekdays, times and trip length under a name. Airport and date range are not saved; they stay as set when loading. Stored in this browser only.
+          Save the current weekdays, times and trip length under a name. Airport and date range are not saved; they stay as set when loading. Stored on the server, so every browser shows the same configs.
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           <input type="text" value={configName} onChange={e => setConfigName(e.target.value)} placeholder="Configuration name"
             style={{ ...controlStyle, maxWidth: 260 }} />
           <button onClick={handleSaveConfig} style={saveButtonStyle}>Save current search</button>
           <select value={selectedConfig} onChange={e => setSelectedConfig(e.target.value)} style={{ ...controlStyle, maxWidth: 220 }}>
-            <option value="">Select saved config…</option>
+            <option value="">{configsLoading ? 'Loading saved configs…' : 'Select saved config…'}</option>
             {savedConfigs.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
           </select>
           <button onClick={handleLoadConfig} style={loadButtonStyle}>Load</button>
           <button onClick={handleDeleteConfig} style={deleteButtonStyle}>Delete</button>
         </div>
+        {configsError && (
+          <p style={{ color: '#ef4444', fontSize: 12, margin: '10px 0 0' }}>{configsError}</p>
+        )}
         {configMessage && (
           <p style={{ color: '#fbbf24', fontSize: 12, margin: '10px 0 0' }}>{configMessage}</p>
         )}

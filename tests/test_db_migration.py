@@ -1,6 +1,6 @@
-"""DB migration tests: v12 must reach and persist, the stale favorite columns
-must be dropped, the unique index recreated, the run be idempotent, and the
-module run cleanly as a script.
+"""DB migration tests: the latest version must be reached and persisted, the stale
+favorite columns dropped, unique index recreated, idempotency, and a clean
+script run. v13 adds the trip_search_configs table used by the Trips tab.
 """
 import os
 import pathlib
@@ -35,7 +35,7 @@ def _version(db):
 def test_fresh_db_reaches_latest(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
-    assert _version(db) == 12
+    assert _version(db) == 13
 
 
 def test_v11_drops_stale_columns(tmp_path):
@@ -70,7 +70,7 @@ def test_fresh_db_has_full_flights_schema(tmp_path):
     assert "idx_flights_airport_month" in idx
 
 
-def test_partial_v11_db_upgraded_to_v12(tmp_path):
+def test_partial_v11_db_upgraded_to_latest(tmp_path):
     # An existing DB that reached v11 (e.g. before the unification) must be
     # upgraded to v12 by adding the missing columns, without data loss.
     db = _fresh_db(tmp_path)
@@ -82,17 +82,37 @@ def test_partial_v11_db_upgraded_to_v12(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 12
+    assert _version(db) == 13
     cols = _cols(db, "flights")
     for c in ("flight_date", "arrival_date", "departure", "arrival", "month_key"):
         assert c in cols, f"{c} should be added by v12"
+
+
+def test_v12_db_upgraded_to_v13(tmp_path):
+    # An existing DB at v12 (the deployed schema before trip search configs)
+    # must gain the trip_search_configs table without losing anything.
+    db = _fresh_db(tmp_path)
+    m.apply_migrations(db)
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO airports (code, name) VALUES (?, ?)", ("FRA", "Frankfurt"))
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (12)")
+    conn.commit()
+    conn.close()
+    m.apply_migrations(db)
+    assert _version(db) == 13
+    cols = _cols(db, "trip_search_configs")
+    assert {"id", "name", "start_weekdays", "max_trip_days"} <= cols
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT name FROM airports WHERE code='FRA'").fetchone()[0] == "Frankfurt"
+    conn.close()
 
 
 def test_migration_is_idempotent(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
     m.apply_migrations(db)  # must not raise on a second run
-    assert _version(db) == 12
+    assert _version(db) == 13
 
 
 def test_migrate_runs_as_script(tmp_path):
@@ -107,4 +127,4 @@ def test_migrate_runs_as_script(tmp_path):
         cwd=str(pathlib.Path.cwd()),
     )
     assert res.returncode == 0, f"stderr: {res.stderr}"
-    assert _version(db) == 12
+    assert _version(db) == 13

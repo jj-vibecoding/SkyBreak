@@ -16,6 +16,7 @@ from skybreak.airport import add_airport, delete_airport, validate_iata
 from skybreak.airport_lookup import fetch_airport_name, fetch_city_country
 from skybreak.db import connect_db, get_setting, set_setting
 from skybreak.db_migrate import apply_migrations
+from skybreak import trip_configs
 
 # Configurable paths for testing vs production
 FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
@@ -242,6 +243,27 @@ def settings():
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
+
+
+@app.route("/api/trip-configs", methods=["GET"])
+def list_trip_configs():
+    return jsonify(trip_configs.list_configs())
+
+
+@app.route("/api/trip-configs", methods=["POST"])
+def save_trip_config():
+    data = request.get_json(silent=True)
+    saved = trip_configs.save_config(data)
+    if saved is None:
+        return jsonify({"error": "A configuration needs a name."}), 400
+    return jsonify(saved), 200
+
+
+@app.route("/api/trip-configs/<name>", methods=["DELETE"])
+def delete_trip_config(name):
+    if not trip_configs.delete_config(name):
+        return jsonify({"error": "Configuration not found.", "name": name}), 404
+    return jsonify({"deleted": True, "name": name})
 
 
 @app.route("/api/favorites", methods=["POST"])

@@ -248,10 +248,37 @@ def migration_v12(conn):
     _bump(conn, 12)
 
 
+def migration_v13(conn):
+    """Named trip search configurations, shared by every browser.
+
+    They used to live in browser localStorage, so each device had its own set.
+    The six configurable search fields get one column each (stable, validatable,
+    queryable) instead of a JSON blob. ``name`` is unique case-insensitively,
+    which is the same duplicate rule the UI already applies.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trip_search_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            start_weekdays TEXT NOT NULL DEFAULT '',
+            end_weekdays TEXT NOT NULL DEFAULT '',
+            max_dep_to_dest TEXT NOT NULL DEFAULT '',
+            min_ret_dep TEXT NOT NULL DEFAULT '',
+            min_trip_days INTEGER,
+            max_trip_days INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    _bump(conn, 13)
+
+
 MIGRATIONS = [
     migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
     migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
-    migration_v11, migration_v12,
+    migration_v11, migration_v12, migration_v13,
 ]
 
 

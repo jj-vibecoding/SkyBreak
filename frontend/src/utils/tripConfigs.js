@@ -1,7 +1,8 @@
-// Trip search configuration helpers — browser-side only, persisted in the
-// user's localStorage (never in the SQLite DB). A saved configuration holds
-// exactly the six configurable search fields below; airport selection and the
-// date range are intentionally not part of a configuration.
+// Trip search configuration helpers — pure validation and legacy-storage
+// reading only, so they stay testable without a DOM or a backend. A saved
+// configuration holds exactly the six configurable search fields below;
+// airport selection and the date range are intentionally not part of one.
+// Persistence itself happens in the SQLite DB through /api/trip-configs.
 
 export const CONFIG_STORAGE_KEY = 'skybreak.tripSearchConfigs.v1';
 
@@ -55,10 +56,6 @@ export function readTripConfigs(storage) {
   }
 }
 
-export function writeTripConfigs(configs, storage) {
-  storage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(configs));
-}
-
 // Adds or replaces a configuration; names compare case-insensitively.
 export function upsertTripConfig(configs, config) {
   const name = typeof config.name === 'string' ? config.name.trim() : '';
@@ -72,4 +69,22 @@ export function deleteTripConfig(configs, name) {
   const target = typeof name === 'string' ? name.trim().toLowerCase() : '';
   if (!target) return configs;
   return configs.filter(c => c.name.toLowerCase() !== target);
+}
+
+// Configurations saved by an older version of the app lived in this browser's
+// localStorage. Push them to the backend once (via the injected poster), then
+// drop the key so the takeover never repeats. If a push fails the key stays, so
+// the next page load retries instead of silently losing the entries.
+export function migrateLegacyConfigs(storage, post) {
+  const legacy = readTripConfigs(storage);
+  if (legacy.length === 0) {
+    storage.removeItem(CONFIG_STORAGE_KEY);
+    return Promise.resolve([]);
+  }
+  return Promise.all(legacy.map(post))
+    .then(() => {
+      storage.removeItem(CONFIG_STORAGE_KEY);
+      return legacy;
+    })
+    .catch(() => legacy);
 }

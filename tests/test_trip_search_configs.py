@@ -1,12 +1,13 @@
 """Trip search configurations (save / load / delete).
 
-The feature lives entirely in the browser: pure helper functions in
-``frontend/src/utils/tripConfigs.js`` plus a React hook. The behaviour tests
-execute the real module with Node (ESM) against an in-memory storage that
-implements the same interface as ``window.localStorage`` — no mocks of the
+Validation and the one-off localStorage takeover live as pure helper functions
+in ``frontend/src/utils/tripConfigs.js``; the React hook turns them into REST
+calls against the SQLite-backed API. The behaviour tests execute the real module
+with Node (ESM) against an in-memory storage that implements the same interface
+as ``window.localStorage``, with the network call injected — no mocks of the
 logic under test. The remaining tests pin the wiring: exactly the six
-configurable fields are part of a configuration, and airport/date fields stay
-out on purpose.
+configurable fields are part of a configuration, airport/date fields stay out,
+and the hook talks to the API instead of localStorage.
 """
 import pathlib
 import re
@@ -36,7 +37,7 @@ EXCLUDED_FIELDS = ["startAirport", "endAirport", "tripStart", "tripEnd"]
 
 NODE_PREAMBLE = """
 import assert from 'node:assert/strict';
-import { readTripConfigs, writeTripConfigs, upsertTripConfig, deleteTripConfig } from '__MODULE_URI__';
+import { readTripConfigs, upsertTripConfig, deleteTripConfig, migrateLegacyConfigs } from '__MODULE_URI__';
 
 const KEY = '__STORAGE_KEY__';
 function memStorage(initial) {
@@ -47,6 +48,7 @@ function memStorage(initial) {
     removeItem(k) { delete data[k]; },
   };
 }
+function seed(st, configs) { st.setItem(KEY, JSON.stringify(configs)); return st; }
 const sample = {
   name: 'Wochenende',
   startWeekdays: [4],
@@ -82,19 +84,18 @@ def test_module_exists():
     assert MODULE.is_file(), "frontend/src/utils/tripConfigs.js is missing"
 
 
-def test_storage_roundtrip():
+def test_reads_stored_configs():
     _run_node(_script("""
 let st = memStorage();
 assert.deepEqual(readTripConfigs(st), []);
-writeTripConfigs([sample], st);
+seed(st, [sample]);
 assert.deepEqual(readTripConfigs(st), [sample]);
 """))
 
 
 def test_upsert_replaces_case_insensitive_and_appends_new():
     _run_node(_script("""
-let st = memStorage();
-writeTripConfigs([sample], st);
+let st = seed(memStorage(), [sample]);
 const updated = { ...sample, name: 'wochenende', maxDepToDest: '17:00' };
 let cfgs = upsertTripConfig(readTripConfigs(st), updated);
 assert.equal(cfgs.length, 1);
@@ -105,15 +106,12 @@ const second = { ...sample, name: 'Langtrip', minTripDays: 5 };
 cfgs = upsertTripConfig(cfgs, second);
 assert.equal(cfgs.length, 2);
 assert.equal(cfgs[1].name, 'Langtrip');
-writeTripConfigs(cfgs, st);
-assert.deepEqual(readTripConfigs(st), cfgs);
 """))
 
 
 def test_delete_removes_case_insensitively():
     _run_node(_script("""
-let st = memStorage();
-writeTripConfigs([sample, { ...sample, name: 'Langtrip' }], st);
+let st = seed(memStorage(), [sample, { ...sample, name: 'Langtrip' }]);
 let cfgs = deleteTripConfig(readTripConfigs(st), 'LANGTRIP');
 assert.equal(cfgs.length, 1);
 assert.equal(cfgs[0].name, 'Wochenende');
@@ -152,6 +150,43 @@ for (const bad of [{ name: '  ' }, {}]) {
 """))
 
 
+def test_legacy_localstorage_is_pushed_to_the_backend_once():
+    _run_node(_script("""
+const posted = [];
+const st = seed(memStorage(), [sample, { ...sample, name: 'Langtrip' }]);
+const post = c => { posted.push(c); return Promise.resolve(c); };
+const migrated = await migrateLegacyConfigs(st, post);
+assert.equal(posted.length, 2);
+assert.equal(posted[0].name, 'Wochenende');
+assert.equal(migrated.length, 2);
+// key removed so the takeover never repeats on the next load
+assert.equal(st.getItem(KEY), null);
+// second run has nothing left to push
+await migrateLegacyConfigs(st, post);
+assert.equal(posted.length, 2);
+"""))
+
+
+def test_legacy_migration_keeps_key_when_push_fails():
+    _run_node(_script("""
+const st = seed(memStorage(), [sample]);
+await migrateLegacyConfigs(st, () => Promise.reject(new Error('offline')));
+// entries must survive a failed push so a later load can retry
+assert.notEqual(st.getItem(KEY), null);
+assert.equal(readTripConfigs(st).length, 1);
+"""))
+
+
+def test_legacy_migration_on_empty_storage_is_a_noop():
+    _run_node(_script("""
+const st = memStorage();
+let calls = 0;
+const migrated = await migrateLegacyConfigs(st, () => { calls++; return Promise.resolve(); });
+assert.equal(calls, 0);
+assert.deepEqual(migrated, []);
+"""))
+
+
 def test_triptab_wires_config_controls():
     src = TRIPTAB.read_text()
     assert "from '../hooks/useTripConfigs'" in src, (
@@ -161,10 +196,20 @@ def test_triptab_wires_config_controls():
         assert label in src, f"TripsTab must render the '{label}' control"
 
 
-def test_hook_persists_via_localstorage():
+def test_hook_persists_via_api():
     src = HOOK.read_text()
-    assert "localStorage" in src, "the hook must persist via window.localStorage"
+    assert "/api/trip-configs" in src, "the hook must persist through the backend API"
     assert "from '../utils/tripConfigs'" in src
+    # localStorage is no longer the store; it is only read once to migrate the
+    # old browser-side configurations into the DB.
+    assert "writeTripConfigs" not in src
+
+
+def test_hook_migrates_legacy_localstorage():
+    src = HOOK.read_text()
+    assert "migrateLegacyConfigs" in src, (
+        "the hook must push existing localStorage configs to the DB once"
+    )
 
 
 def test_config_fields_are_exactly_the_six_search_fields():
