@@ -91,6 +91,7 @@ Token masked in output; never commit raw value.
   seed()-Helper statt writeTripConfigs, test_db_migration.py Version 12 -> 13.
 - Node-Tests in pytest: Top-Level-await erlaubt, Top-Level-return NICHT.
 - 85 passed, 2 skipped (docker daemon / playwright server - vorbestehend). npm build gruen.
-- PR #79 opened against main (branch pushed); CI test job green: frontend "Compiled successfully",
-  pytest 86 passed / 1 skipped (CI hat Docker-Daemon, nur Playwright-Skip). Noch NICHT gemergt.
+- PR #79 SQUASH-MERGED to main as 7dfca1a (async merge API, sha-pinned). CI green: frontend "Compiled
+  successfully", pytest 86 passed / 1 skipped (CI hat Docker-Daemon, nur Playwright-Skip).
+  Feature branch geloescht (remote + lokal); main lokal = origin/main; 85 passed/2 skipped lokal.
 - gh CLI braucht hier explizit GH_TOKEN=... vor dem Befehl (GITHUB_TOKEN reicht nicht automatisch).
