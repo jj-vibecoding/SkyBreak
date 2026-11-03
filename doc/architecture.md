@@ -13,7 +13,7 @@
 
 2. **Backend Service** (Python/Flask)
    - REST API built with Flask serving static frontend build and JSON endpoints
-   - Routes: `/api/airports`, `/api/flights`, `/api/flights/future`, `/api/settings`
+   - Routes: `/api/airports`, `/api/flights`, `/api/flights/future`, `/api/settings`, `/api/trip-configs`
    - Local SQLite database for airports, flights, and settings
    - Integration with RapidAPI aerodatabox for flight data
 
@@ -24,10 +24,12 @@
    - Cleans old flights (`departure_time < now`) on each interval
 
 4. **Database** (SQLite)
-   - Tables: `airports`, `flights`, `settings`
+   - Tables: `airports`, `flights`, `settings`, `trip_search_configs`
    - `airports`: code, name, created_at
    - `flights`: airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead
    - `settings`: key-value store for API key, fetch intervals, max days
+   - `trip_search_configs`: named trip search settings (six search fields, unique
+     case-insensitive name) shared by all browsers via `/api/trip-configs`
    - **Access layer** — `skybreak/db.py`: every module opens the DB through
      `connect_db()` / the `connection()` context manager. The path is read from
      `DB_FILE` at call time so the test harness can point it at a temp file.

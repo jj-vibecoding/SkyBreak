@@ -266,13 +266,14 @@ Each story can be developed and tested independently, allowing incremental deliv
 **Title:** As a user, I want to save my trip search settings under a name so I can reload them later.
 
 **Description:**
-On the Trips page the current search (start/end weekdays, latest departure time, earliest return departure time, min/max trip length) can be saved as a named configuration and reloaded at any time. Saved configurations are stored in the browser's local storage — not in the SQLite database. Airport selection and the date range are intentionally excluded from a configuration.
+On the Trips page the current search (start/end weekdays, latest departure time, earliest return departure time, min/max trip length) can be saved as a named configuration and reloaded at any time. Saved configurations are stored in the SQLite database through the REST API, so every browser and device shows the same set. Airport selection and the date range are intentionally excluded from a configuration.
 
 **Acceptance Criteria:**
 - Only start/end weekdays, departure/return times and min/max trip length are saved
 - Airport and earliest start / latest end dates are NOT part of a configuration (kept as-is on load)
 - Every configuration has a name; duplicate names require an overwrite confirmation
 - Configurations can be loaded and deleted (with confirmation)
-- Data persists across page reloads in the same browser (localStorage), no backend/DB change
+- Data is persisted server-side (SQLite, `trip_search_configs`) and is identical in every browser/device
+- Configurations a browser had saved locally before are transferred to the database on first load
 
 **Priority:** Medium
