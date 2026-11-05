@@ -1,9 +1,6 @@
+// D6/D10: Responsive SettingsTab — toast for save feedback (Fix #12), 
+//        touch targets ≥44px (Fix #6), English UI (Fix #16).
 import React, { useState, useEffect } from 'react';
-
-const sectionStyle = {
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-};
 
 const inputStyle = {
   padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
@@ -18,6 +15,7 @@ export default function SettingsTab() {
     fetch_max_months: '1', scrape_delay_ms: '500',
     price_fetch_interval_hours: '6', google_consent_cookie: SOCS_DEFAULT,
   });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(data => {
@@ -30,8 +28,15 @@ export default function SettingsTab() {
     }).catch(() => {});
   }, []);
 
+  const showToast = (message, type) => {
+    window.dispatchEvent(new CustomEvent('showToast', { 
+      detail: { message, type: type || 'info' } 
+    }));
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
     const body = {
       fetch_max_months: settings.fetch_max_months,
       scrape_delay_ms: settings.scrape_delay_ms,
@@ -42,16 +47,17 @@ export default function SettingsTab() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
     if (res.ok) {
-      alert('Settings saved');
+      // Fix #12: Use toast instead of alert
+      showToast('Settings saved successfully', 'success');
       setSettings(body);
     } else {
-      alert('Failed to save');
+      showToast('Failed to save settings', 'error');
     }
+    setSaving(false);
   };
 
   return (
-    <section style={sectionStyle}>
-      <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>API Settings</h3>
+    <>
       <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Configure max fetch months and scrape delay.</p>
       <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -79,17 +85,18 @@ export default function SettingsTab() {
         </div>
         <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
           <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Google Consent Cookie (SOCS)</h4>
-          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Cookie-Wert für EU-Consent (Alle ablehnen).</p>
+          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Cookie value for EU consent (Decline all).</p>
           <input id="consentCookie" type="text" value={settings.google_consent_cookie || SOCS_DEFAULT}
-            onChange={e => setSettings(s => ({ ...s, google_consent_cookie: e.target.value }))} placeholder="SOCS Cookie Wert"
+            onChange={e => setSettings(s => ({ ...s, google_consent_cookie: e.target.value }))} placeholder="SOCS Cookie Value"
             style={{ ...inputStyle, maxWidth: 520, fontSize: 14 }} />
         </div>
-        <button type="submit" style={{
+        <button type="submit" className="tap" style={{
           marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
           background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
-          color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
-        }}>Save</button>
+          color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: saving ? 'not-allowed' : 'pointer',
+          alignSelf: 'flex-start', opacity: saving ? 0.6 : 1
+        }}>{saving ? 'Saving…' : 'Save'}</button>
       </form>
-    </section>
+    </>
   );
 }

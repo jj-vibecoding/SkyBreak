@@ -95,3 +95,9 @@ Token masked in output; never commit raw value.
   successfully", pytest 86 passed / 1 skipped (CI hat Docker-Daemon, nur Playwright-Skip).
   Feature branch geloescht (remote + lokal); main lokal = origin/main; 85 passed/2 skipped lokal.
 - gh CLI braucht hier explizit GH_TOKEN=... vor dem Befehl (GITHUB_TOKEN reicht nicht automatisch).
+
+# Responsive Frontend Fix (2026-11-05)
+- Symptom "nur dunkelblauer Hintergrund am iPhone" = veraltetes Bundle im Container, NICHT ein Disk-Bug: `useEffect`-Import war auf Disk schon gefixt. Root Cause immer erst per neuem Build + Container-Recreate verifizieren.
+- useConfirm/ToastProvider (Dialogs.js): Jede Komponente, die showConfirm() nutzt, MUSS ihr eigenes <ConfirmDialog/> im Root rendern — sonst löst das Promise nie auf (UI friert). ToastProvider hört auf window CustomEvent "showToast".
+- ChartModal: SVG viewBox muss responsive sein (getChartWidth = min(innerWidth-48,720)); Punkte/Tooltip-Clamp/Legende skalieren damit; Legende < 480px unter den Chart.
+- Container skybreak-skybreak-1 wurde mit plain `docker run` gestartet (kein Compose-Label). Identische Config: -p 8088:80 -v /opt/skybreak/:/data/ -e DB_FILE=/data/skybreak.db, image skybreak-local, cmd python -m skybreak.app.
