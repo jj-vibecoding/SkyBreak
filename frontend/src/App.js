@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { useMediaQuery, useIsLargeOrAbove } from './hooks/useMediaQuery';
 import { ToastProvider, useConfirm } from './components/Dialogs';
-import Layout from './components/Layout';
 import AirportsTab from './components/AirportsTab';
 import FlightsTab from './components/FlightsTab';
 import TripsTab from './components/TripsTab';
@@ -263,23 +262,17 @@ export default function App() {
               </span>
             </div>
 
-            {tab === 'trips' && <Layout title="Trips"><TripsTab list={list} airportNames={airportNames} /></Layout>}
+            {tab === 'trips' && <TripsTab list={list} airportNames={airportNames} />}
 
-            {tab === 'favorites' && (
-              <Layout title="Favorites">
-                <FavoriteTripPrices />
-              </Layout>
-            )}
+            {tab === 'favorites' && <FavoriteTripPrices />}
 
-            {tab === 'airports' && <Layout title="Airports"><AirportsTab list={list} setList={setList} /></Layout>}
+            {tab === 'airports' && <AirportsTab list={list} setList={setList} />}
 
             {tab === 'flights' && (
-              <Layout title="Flight Schedule">
-                <FlightsTab list={list} onFetchNow={handleFetchNow} fetchRunning={scrapeRunning} />
-              </Layout>
+              <FlightsTab list={list} onFetchNow={handleFetchNow} fetchRunning={scrapeRunning} />
             )}
 
-            {tab === 'settings' && <Layout title="Settings"><SettingsTab /></Layout>}
+            {tab === 'settings' && <SettingsTab />}
           </div>
         </main>
 

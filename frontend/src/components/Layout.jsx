@@ -9,6 +9,10 @@ const sectionStyle = {
 };
 
 export default function Layout({ title, children, actions }) {
+  // When neither title nor actions are provided, App.js already renders the page header.
+  // Don't render an empty bordered section in that case.
+  if (!title && !actions) return <>{children}</>;
+
   return (
     <section style={sectionStyle}>
       {(title || actions) && (

@@ -214,7 +214,6 @@ export default function TripsTab({ list, airportNames }) {
 
   return (
     <section style={{ ...sectionStyleFlat, padding: isSmallScreen ? 14 : 24 }}>
-      <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Trip Turnaround Finder</h3>
       <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
       <div style={{ display: 'grid', gridTemplateColumns: isSmallScreen ? '1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 18 }}>
         <div style={fieldBoxStyle()}>
