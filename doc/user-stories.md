@@ -9,264 +9,217 @@ Users can input international airport codes (e.g., "LHR", "JFK", "CDG") to disco
 
 **Acceptance Criteria:**
 - Input field accepts alphanumeric airport codes
-- Validation ensures valid IATA codes
+- Validation ensures valid IATA codes (3-char regex)
 - Code is stored in the system for later use
 - Error handling for invalid codes
 - Frontend input form validates and submits to backend API
 - Backend stores validated code and returns confirmation to UI
 - UI displays stored airport list with feedback
 
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
-
 **Priority:** High
+**Status:** Implemented
+
+---
 
 ## Story 2: Load Departures and Arrivals
 
 **Title:** As a user, I want the system to load flight departures and arrivals from airports.
 
 **Description:**
-The system should fetch flight schedules from the integrated Google Flight Scraper and store them locally.
+The system fetches flight schedules via RapidAPI aerodatabox and stores them locally in SQLite.
 
 **Acceptance Criteria:**
-- Scraper runs periodically to collect flight data
+- Scraper runs periodically (configured interval) to collect flight data
 - Departure and arrival times are parsed and stored
 - Data is persisted in the local database
 - Invalid or missing data is handled gracefully
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Rate-limit backoff on 429 responses
 
 **Priority:** High
+**Status:** Implemented
+
+---
 
 ## Story 3: Calculate Turn-arounds
 
 **Title:** As a user, I want to calculate possible turn-arounds from one airport to a destination and back.
 
 **Description:**
-The system should compute feasible round-trip itineraries (start → destination → return) considering travel time.
+The system computes feasible round-trip itineraries (start → destination → return) considering travel time, weekday constraints, and trip duration limits.
 
 **Acceptance Criteria:**
 - Algorithm considers flight durations between airports
-- Turns are calculated excluding weekends (Sat/Sun not counted as days off)
-- Start and end times are configurable
-- Resulting itinerary is stored in the system
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Turnaround matching uses SQL-based filtering with in-memory hash join
+- Start and end weekdays are configurable via UI
+- Min/max trip duration enforced
+- Earliest/latest departure/return times configurable
+- Resulting itineraries displayed on Trips tab
 
 **Priority:** High
+**Status:** Implemented
+
+---
 
 ## Story 4: Configure Days Off
 
 **Title:** As a user, I want to configure which days are considered days off for turn-arounds.
 
 **Description:**
-Users can set which days (e.g., Saturday and Sunday) should not count as working days in turn-around calculations.
+Users select which weekdays (0=Monday … 6=Sunday) are valid for outbound and return flights on the Trips search page.
 
 **Acceptance Criteria:**
-- Days off are configurable per user or globally
-- Turn-around calculation excludes configured days
-- Changes take effect immediately
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Weekday selection via UI component
+- Turn-around calculation respects selected weekdays
+- Changes take effect immediately on next search
 
 **Priority:** Medium
+**Status:** Implemented
 
-## Story 5: Select Monitored Trips
+---
 
-**Title:** As a user, I want to select trips to monitor for price changes.
+## Story 5: Select Monitored Trips (Favorites)
+
+**Title:** As a user, I want to save trips as favorites and monitor their prices.
 
 **Description:**
-Users can choose which computed turn-arounds they want to track for price monitoring.
+Users can add turn-arounds from the Trips tab to a Favorites list. The system tracks price history for each favorite.
 
 **Acceptance Criteria:**
-- List of monitored trips is displayed in the UI
-- Users can enable/disable monitoring per trip
+- List of favorite trips displayed on Favorites tab
+- Users can add/remove favorites with confirmation
 - Selected trips are tracked for price changes
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Prices fetched periodically via background scheduler
 
 **Priority:** Medium
+**Status:** Implemented
 
-## Story 6: Integrate Google Flight Scraper
+---
 
-**Title:** As a user, I want the system to use an open-source Google Flight Scraper to get real-time flight prices.
+## Story 6: Flight Price Data Integration
+
+**Title:** As a user, I want the system to fetch real-time flight prices via RapidAPI.
 
 **Description:**
-Implement integration with a maintained open-source scraper to fetch current flight prices.
+The backend integrates with RapidAPI aerodatabox for flight schedule data and Google Flights (via kayak_direct) for pricing.
 
 **Acceptance Criteria:**
-- Scraper runs daily (or configured interval)
-- Flight prices are extracted and stored
-- Scraper handles rate limits and errors gracefully
-- Fallback mechanism if scraper fails
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- API key configurable in Settings tab
+- Flight schedules fetched on configured interval
+- Prices fetched for favorites on configured interval
+- Rate-limit handling with backoff on 429 responses
 
 **Priority:** High
+**Status:** Implemented
 
-## Story 7: Price Check Every 24 Hours
+---
 
-**Title:** As a user, I want the system to check flight prices for monitored trips every 24 hours.
+## Story 7: Price Monitoring Scheduler
+
+**Title:** As a user, I want the system to automatically check flight prices for favorite trips at a configurable interval.
 
 **Description:**
-Automated price monitoring runs daily to compare current prices with historical data.
+A background scheduler (apscheduler) runs price checks for all favorites on a configured interval (default 6 hours).
 
 **Acceptance Criteria:**
-- Scheduler triggers price check daily
+- Scheduler triggers price checks on configured interval
 - Comparison against previous price stored in DB
-- New price data is saved
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- New price data saved to `favorite_trip_prices` table
+- Interval configurable in Settings tab
 
 **Priority:** High
+**Status:** Implemented
+
+---
 
 ## Story 8: Price History Chart
 
-**Title:** As a user, I want to view a chart showing price history for each monitored trip.
+**Title:** As a user, I want to view a chart showing price history for each favorite trip.
 
 **Description:**
-Visualize the price trends of monitored turn-arounds over time.
+Visualize the price trends of favorite trips over time using an interactive SVG chart modal.
 
 **Acceptance Criteria:**
-- Line chart shows price vs. date for each monitored trip
-- Chart updates when new price data is available
-- Clear visualization of price fluctuations
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Line chart shows price vs. date for each favorite trip
+- Chart displays outbound, return, and total prices
+- Responsive SVG with proper scaling on mobile
+- Date-based X-axis with collapsible data points
+- Trigger manual price updates via button
 
 **Priority:** Medium
+**Status:** Implemented
 
-## Story 9: Telegram Notifications
+---
 
-**Title:** As a user, I want to receive Telegram notifications when a monitored trip becomes cheaper than a predefined maximum price.
+## Story 9: Remove Monitoring (Unfavorite)
 
-**Description:**
-Integrate Telegram Bot API to send alerts when prices drop.
-
-**Acceptance Criteria:**
-- User sets maximum price threshold per trip
-- Notification sent via Telegram when price falls below threshold
-- Notification includes trip details and new price
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
-
-**Priority:** Low (optional feature)
-
-## Story 10: Remove Monitoring
-
-**Title:** As a user, I want to disable monitoring for a trip and remove its notification and price history.
+**Title:** As a user, I want to remove a trip from my favorites and delete its price history.
 
 **Description:**
-Ability to unmonitor a trip, removing associated notifications and historical data.
+Removing a favorite deletes the trip entry and all associated price history records.
 
 **Acceptance Criteria:**
-- Action removes trip from monitoring list
-- Associated Telegram notifications are stopped
-- Price history for the trip is cleared
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Action removes trip from favorites list
+- All price history for the trip is deleted
+- Confirmation dialog before deletion
+- UI updates immediately
 
 **Priority:** Medium
+**Status:** Implemented
 
-## Story 11: Remove Entire Airport
+---
+
+## Story 10: Remove Entire Airport
 
 **Title:** As a user, I want to remove an entire airport from the system.
 
 **Description:**
-Deletion of an airport should remove all associated data (flights, trips, etc.).
+Deletion of an airport removes it from the airports table. Related data (flights) retains its records but is no longer associated with the deleted airport code.
 
 **Acceptance Criteria:**
 - Confirmation before deletion
-- All related records are cleaned up
-- No orphaned data remains
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
+- Airport removed from list
+- No orphaned references in UI
 
 **Priority:** Medium
-
-## Story 12: Architecture Documentation
-
-**Title:** As a developer, I want clear architectural documentation to guide implementation.
-
-**Description:**
-Create comprehensive architecture docs covering components, data flow, and technology choices.
-
-**Acceptance Criteria:**
-- Document describes all system components
-- Data flow between components is clear
-- Technology stack is specified
-- Implementation roadmap is outlined
-
-- Frontend input form validates and submits to backend API
-- Backend stores validated code and returns confirmation to UI
-- UI displays stored airport list with feedback
-
-**Priority:** Low (foundational)
+**Status:** Implemented
 
 ---
 
-## Implementation Order (Recommended)
+## Story 11: Filter by Date
 
-1. **Architecture Setup** - Docker compose, basic project structure
-2. **Airport Management** - CRUD for airports
-3. **Flight Scraper Integration** - Connect to Google Flight Scraper
-4. **Turnaround Calculation** - Core algorithm for round trips
-5. **Monitoring System** - Track and store trips
-6. **Price Tracking** - Daily price checks
-7. **Visualization** - Price charts
-8. **Telegram Notifications** - Alert system
-9. **Configuration** - Days off, thresholds, etc.
-10. **Frontend** - UI for all features
-
-Each story can be developed and tested independently, allowing incremental delivery.Test-Update: Filter, Next-Year-Only, TDD, REST-API (free), Google-Flight=prices only
-## Story 13: Filter by Date
-
-**Title:** As a user, I want to filter potential trips by date.
+**Title:** As a user, I want to filter potential trips by date range.
 
 **Acceptance Criteria:**
-- Date picker or date-range filter
-- Only trips matching selected date shown
+- Date range picker on Trips tab (trip start / trip end dates)
+- Only trips within the selected date range are shown
+- Applies to both outbound and return flights
+
+**Priority:** Medium
+**Status:** Implemented
 
 ---
 
-## Story 14: Visible Flight Prices
+## Story 12: Visible Flight Prices
 
 **Title:** As a user, I want to see trip prices as both single flight prices and combined price.
 
 **Acceptance Criteria:**
-- Each flight leg shows individual price
-- Combined total price shown for turn-around
-- Both prices visible in list and details
+- Each favorite shows individual outbound and return prices
+- Combined total price shown for the round-trip
+- Prices visible in favorites list and detail views
+- Price status indicator (up/down/stale)
+
+**Priority:** Medium
+**Status:** Implemented
 
 ---
 
-## Story 15: Save Trip Search Configurations
+## Story 13: Save Trip Search Configurations
 
 **Title:** As a user, I want to save my trip search settings under a name so I can reload them later.
 
 **Description:**
-On the Trips page the current search (start/end weekdays, latest departure time, earliest return departure time, min/max trip length) can be saved as a named configuration and reloaded at any time. Saved configurations are stored in the SQLite database through the REST API, so every browser and device shows the same set. Airport selection and the date range are intentionally excluded from a configuration.
+On the Trips page the current search parameters (start/end weekdays, latest departure time, earliest return departure time, min/max trip length) can be saved as a named configuration and reloaded at any time. Saved configurations are stored in the SQLite database through the REST API, so every browser and device shows the same set. Airport selection and the date range are intentionally excluded from a configuration.
 
 **Acceptance Criteria:**
 - Only start/end weekdays, departure/return times and min/max trip length are saved
@@ -274,6 +227,32 @@ On the Trips page the current search (start/end weekdays, latest departure time,
 - Every configuration has a name; duplicate names require an overwrite confirmation
 - Configurations can be loaded and deleted (with confirmation)
 - Data is persisted server-side (SQLite, `trip_search_configs`) and is identical in every browser/device
-- Configurations a browser had saved locally before are transferred to the database on first load
+- Configurations saved locally via localStorage are migrated to the database on first sync
 
 **Priority:** Medium
+**Status:** Implemented
+
+---
+
+## Story 14: Local UI Persistence
+
+**Title:** As a user, I want my UI preferences (date pickers, sorting, filters) to persist across page refreshes.
+
+**Description:**
+UI state on the Trips and Favorites tabs is persisted in browser localStorage so users don't lose their settings when refreshing or navigating away.
+
+**Acceptance Criteria:**
+- Airport selections, date ranges, weekday picks persist on Trips tab
+- Sorting preferences, date filters persist on Favorites tab
+- Preferences restored automatically on page load
+- No server round-trips for UI state
+
+**Priority:** Low
+**Status:** Implemented
+
+---
+
+## Not Implemented (Future)
+
+### Telegram Notifications
+As a user, I want to receive Telegram notifications when a monitored trip becomes cheaper than a predefined maximum price.
