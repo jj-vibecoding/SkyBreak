@@ -256,7 +256,7 @@ export default function App() {
             margin: isLarge ? '0 auto' : '0',
           }}>
             {/* Compact header per tab (Fix #8) */}
-            <div style={{ marginBottom: 8 }}>
+            <div style={{ marginBottom: 8, marginLeft: isLarge ? 0 : 60 }}>
               <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f8fafc' }}>
                 {NAV.find(n => n.key === tab)?.label || ''}
               </h2>
