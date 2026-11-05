@@ -1,7 +1,8 @@
 """DB migration tests: the latest version must be reached and persisted, the stale
 favorite columns dropped, unique index recreated, idempotency, and a clean
 script run. v13 adds trip_search_configs; v14 adds trip_price_quotes for
-on-demand price quotes in TripsTab.
+on-demand price quotes in TripsTab; v15 adds scrape_runs + price_runs for
+the health dashboard.
 """
 import os
 import pathlib
@@ -36,7 +37,7 @@ def _version(db):
 def test_fresh_db_reaches_latest(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
-    assert _version(db) == 14
+    assert _version(db) == 15
 
 
 def test_v11_drops_stale_columns(tmp_path):
@@ -83,7 +84,7 @@ def test_partial_v11_db_upgraded_to_latest(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 14
+    assert _version(db) == 15
     cols = _cols(db, "flights")
     for c in ("flight_date", "arrival_date", "departure", "arrival", "month_key"):
         assert c in cols, f"{c} should be added by v12"
@@ -101,7 +102,7 @@ def test_v13_db_upgraded_to_v14(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 14
+    assert _version(db) == 15
     cols = _cols(db, "trip_search_configs")
     assert {"id", "name", "start_weekdays", "max_trip_days"} <= cols
     conn = sqlite3.connect(db)
@@ -120,7 +121,7 @@ def test_v14_creates_trip_price_quotes_table(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 14
+    assert _version(db) == 15
     # Verify the new table exists with expected columns
     cols = _cols(db, "trip_price_quotes")
     for c in ("start_airport", "destination_airport", "outbound_date",
@@ -137,7 +138,7 @@ def test_migration_is_idempotent(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
     m.apply_migrations(db)  # must not raise on a second run
-    assert _version(db) == 14
+    assert _version(db) == 15
 
 
 def test_migrate_runs_as_script(tmp_path):
@@ -152,4 +153,29 @@ def test_migrate_runs_as_script(tmp_path):
         cwd=str(pathlib.Path.cwd()),
     )
     assert res.returncode == 0, f"stderr: {res.stderr}"
-    assert _version(db) == 14
+    assert _version(db) == 15
+
+
+def test_v15_creates_run_log_tables(tmp_path):
+    # An existing DB at v14 must gain scrape_runs + price_runs without data loss.
+    db = _fresh_db(tmp_path)
+    m.apply_migrations(db)
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO airports (code, name) VALUES (?, ?)", ("FRA", "Frankfurt"))
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (14)")
+    conn.commit()
+    conn.close()
+    m.apply_migrations(db)
+    assert _version(db) == 15
+    # Verify both new tables exist with expected columns
+    scrape_cols = _cols(db, "scrape_runs")
+    for c in ("started_at", "finished_at", "status", "airports", "flights_saved"):
+        assert c in scrape_cols, f"{c} should be in scrape_runs"
+    price_cols = _cols(db, "price_runs")
+    for c in ("started_at", "finished_at", "status", "total", "success", "failed"):
+        assert c in price_cols, f"{c} should be in price_runs"
+    # Existing data preserved
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT name FROM airports WHERE code='FRA'").fetchone()[0] == "Frankfurt"
+    conn.close()

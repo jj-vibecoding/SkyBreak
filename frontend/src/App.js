@@ -8,6 +8,7 @@ import FlightsTab from './components/FlightsTab';
 import TripsTab from './components/TripsTab';
 import FavoriteTripPrices from './components/FavoriteTripPrices';
 import SettingsTab from './components/SettingsTab';
+import StatusTab from './components/StatusTab';
 import { useActiveTab } from './hooks/useActiveTab';
 import { useAirports } from './hooks/useAirports';
 
@@ -17,6 +18,7 @@ const NAV = [
   { key: 'airports', label: 'Airports', icon: '✈️' },
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
+  { key: 'status', label: 'Status', icon: '📊' },
 ];
 
 // Tab-specific header subtitles for compact mobile header (Fix #8)
@@ -26,6 +28,7 @@ const TAB_SUBTITLES = {
   airports: 'Manage saved airports',
   flights: 'View scheduled flights',
   settings: 'Configure your dashboard',
+  status: 'Health dashboard & backups',
 };
 
 // App shell: routing, responsive sidebar, and the shared airport list that the
@@ -273,6 +276,8 @@ export default function App() {
             )}
 
             {tab === 'settings' && <SettingsTab />}
+
+            {tab === 'status' && <StatusTab />}
           </div>
         </main>
 

@@ -304,10 +304,44 @@ def migration_v14(conn):
     _bump(conn, 14)
 
 
+def migration_v15(conn):
+    """Health Dashboard: run-log tables for scraper and price-scheduler.
+
+    Records every scrape_all_airports() and scrape_favorite_prices() execution
+    so the health endpoint can display freshness, last-run times and error rates.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scrape_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at TIMESTAMP,
+            status TEXT NOT NULL CHECK(status IN ('running','ok','failed')),
+            airports INTEGER,
+            flights_saved INTEGER
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS price_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at TIMESTAMP,
+            status TEXT NOT NULL CHECK(status IN ('running','ok','failed')),
+            total INTEGER,
+            success INTEGER,
+            failed INTEGER
+        )
+        """
+    )
+    _bump(conn, 15)
+
+
 MIGRATIONS = [
     migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
     migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
-    migration_v11, migration_v12, migration_v13, migration_v14,
+    migration_v11, migration_v12, migration_v13, migration_v14, migration_v15,
 ]
 
 

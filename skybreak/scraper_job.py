@@ -76,9 +76,21 @@ def _save_kayak(airport, flights, month):
     conn.close()
 
 def scrape_all_airports():
+    """Scrape all airports and log the run in ``scrape_runs``."""
     # Schema is owned by the versioned migration; ensure it before scraping.
     apply_migrations()
     conn = connect_db()
+
+    # ── start run-log row ────────────────────────────────────────────────
+    try:
+        run_id = conn.execute(
+            "INSERT INTO scrape_runs (started_at, status) VALUES (?, 'running')",
+            (datetime.now().isoformat(),),
+        ).lastrowid
+        conn.commit()
+    except Exception:
+        run_id = None  # tables may not exist yet
+
     rows = conn.execute("SELECT code FROM airports").fetchall()
     conn.close()
     max_raw = get_setting("fetch_max_months") or get_setting("fetch_max_days") or "3"
@@ -87,18 +99,41 @@ def scrape_all_airports():
     max_months = max(1, min(max_months, 12))
     now = datetime.now()
     months = sorted({(now + timedelta(days=30*i)).strftime("%Y-%m") for i in range(max_months)})
-    for (code,) in rows:
-        airport = code.upper()
+
+    total_airports = len(rows)
+    total_flights_saved = 0
+    status = "ok"
+    try:
+        for (code,) in rows:
+            airport = code.upper()
+            try:
+                for month in months:
+                    logger.info("Kayak fetch %s %s", airport, month)
+                    _clear_month(airport, month)
+                    res = _run_kayak(airport, month)
+                    flights = _import_kayak_json(airport)
+                    _save_kayak(airport, flights, month)
+                    total_flights_saved += len(flights)
+                    logger.info("Saved %d flights for %s %s", len(flights), airport, month)
+            except Exception as e:
+                logger.info("Kayak fetch failed %s: %s", airport, e)
+    except Exception as e:
+        status = "failed"
+        logger.warning("scrape_all_airports error: %s", e)
+
+    # ── finish run-log row ───────────────────────────────────────────────
+    if run_id is not None:
         try:
-            for month in months:
-                logger.info("Kayak fetch %s %s", airport, month)
-                _clear_month(airport, month)
-                res = _run_kayak(airport, month)
-                flights = _import_kayak_json(airport)
-                _save_kayak(airport, flights, month)
-                logger.info("Saved %d flights for %s %s", len(flights), airport, month)
-        except Exception as e:
-            logger.info("Kayak fetch failed %s: %s", airport, e)
+            conn2 = connect_db()
+            conn2.execute(
+                "UPDATE scrape_runs SET finished_at = ?, status = ?, airports = ?, flights_saved = ? "
+                "WHERE id = ?",
+                (datetime.now().isoformat(), status, total_airports, total_flights_saved, run_id),
+            )
+            conn2.commit()
+            conn2.close()
+        except Exception:
+            pass  # logging must not break the scrape
 
 def start_price_scheduler():
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -119,8 +154,21 @@ def start_price_scheduler():
         logger.error("Preis-Scheduler konnte nicht gestartet werden: %s", e)
 
 def scrape_favorite_prices():
-    """Preise aller favorisierten Trips abfragen."""
+    """Preise aller favorisierten Trips abfragen und in ``price_runs`` loggen."""
     logger.info("Starting automatic price update for all favorites")
+
+    # ── start run-log row ────────────────────────────────────────────────
+    try:
+        conn_start = connect_db()
+        run_id = conn_start.execute(
+            "INSERT INTO price_runs (started_at, status) VALUES (?, 'running')",
+            (datetime.now().isoformat(),),
+        ).lastrowid
+        conn_start.commit()
+        conn_start.close()
+    except Exception:
+        run_id = None
+
     try:
         conn = connect_db()
         rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
@@ -128,7 +176,7 @@ def scrape_favorite_prices():
         logger.info("Found %d favorite trips to update", len(rows))
         if not rows:
             logger.info("No favorite trips found, skipping price update")
-            return
+
         from skybreak.flight_prices import fetch_prices_favorite
         success_count = 0
         fail_count = 0
@@ -145,8 +193,31 @@ def scrape_favorite_prices():
                 logger.warning("Preis-Update Favorit %s fehlgeschlagen: %s", fav_id, e)
                 fail_count += 1
         logger.info("Preis-Update abgeschlossen: %d erfolgreich, %d fehlgeschlagen", success_count, fail_count)
+        status = "ok" if fail_count == 0 else "failed"
     except Exception as e:
         logger.warning("Preis-Scheduler Fehler: %s", e)
+        status = "failed"
+
+    # ── finish run-log row ───────────────────────────────────────────────
+    if run_id is not None:
+        try:
+            conn2 = connect_db()
+            conn2.execute(
+                "UPDATE price_runs SET finished_at = ?, status = ?, total = ?, success = ?, failed = ? "
+                "WHERE id = ?",
+                (
+                    datetime.now().isoformat(),
+                    status,
+                    success_count + fail_count,
+                    success_count,
+                    fail_count,
+                    run_id,
+                ),
+            )
+            conn2.commit()
+            conn2.close()
+        except Exception:
+            pass  # logging must not break the price update
 
 def save_flights(airport, flights, month=None):
     # Handle nested API-style flight objects (departure/arrival with scheduledTime/airport)
