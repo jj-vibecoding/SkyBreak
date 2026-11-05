@@ -1,7 +1,8 @@
 // D4/D5/D12: Responsive TripsTab — weekday chips (Fix #4),
 //        trip cards <640px / table ≥640px (Fix #5), Actions header (Fix #18),
 //        toast/confirm dialogs (Fix #12), English UI (Fix #16).
-import React, { useState, useEffect } from 'react';
+//        On-demand price quotes for candidate trips (Fix #24).
+import React, { useState, useEffect, useCallback } from 'react';
 import { formatTripDateTime } from '../utils/format';
 import { useTripConfigs } from '../hooks/useTripConfigs';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -81,6 +82,50 @@ export default function TripsTab({ list, airportNames }) {
   const [turnarounds, setTurnarounds] = useState([]);
   const [expanded, setExpanded] = useState({});
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
+
+  // On-demand price quote state: key → {status, prices, fetched_at}
+  // Key = 'start|dest|out_date|ret_date|out_fnum|ret_fnum'
+  const [quotes, setQuotes] = useState({});
+  const quoteKey = (t) => `${startAirport || ''}|${t.hinflug_ziel || t.destination || ''}|${(t.hinflug_abflug_zeit || '').split(' ')[0]}|${(t.rueckflug_abflug_zeit || '').split(' ')[0]}|${t.hinflug_flight_number || ''}|${t.rueckflug_flight_number || ''}`;
+
+  const fetchQuote = useCallback(async (t) => {
+    const key = quoteKey(t);
+    setQuotes(prev => ({ ...prev, [key]: { status: 'loading' } }));
+    try {
+      const res = await fetch('/api/prices/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_airport: startAirport || '',
+          destination_airport: t.hinflug_ziel || t.destination || '',
+          outbound_date: (t.hinflug_abflug_zeit || '').split(' ')[0] || '',
+          return_date: (t.rueckflug_abflug_zeit || '').split(' ')[0] || '',
+          outbound_flight_number: t.hinflug_flight_number || '',
+          return_flight_number: t.rueckflug_flight_number || '',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setQuotes(prev => ({ ...prev, [key]: { status: 'error', error: err.error || `HTTP ${res.status}` } }));
+        return;
+      }
+      const data = await res.json();
+      setQuotes(prev => ({ ...prev, [key]: { status: 'done', ...data } }));
+    } catch (e) {
+      setQuotes(prev => ({ ...prev, [key]: { status: 'error', error: e.message } }));
+    }
+  }, [startAirport]);
+
+  function formatPrice(v) { return v != null ? `€${Math.round(v)}` : '–'; }
+  function relativeAge(ts) {
+    if (!ts) return '';
+    try {
+      const diff = (Date.now() - new Date(ts + 'Z').getTime()) / 60000; // minutes
+      if (diff < 1) return 'just now';
+      if (diff < 60) return `${Math.round(diff)}m ago`;
+      return `${Math.round(diff / 60)}h ago`;
+    } catch { return ''; }
+  }
 
   // Saved search configs live in the server DB (shared by every browser);
   // they never include the airport selection or the date range.
@@ -310,22 +355,44 @@ export default function TripsTab({ list, airportNames }) {
                     {isSmallScreen ? (
                       // Cards view for mobile (<640px)
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {group.map((t, i) => (
-                          <div key={i} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600, marginBottom: 6 }}>
-                              <span style={{ color: '#38bdf8' }}>Out:</span> {formatTripDateTime(t.hinflug_abflug_zeit)} <span style={{ color: '#94a3b8' }}>({t.hinflug_flight_number || '-'})</span>
+                        {group.map((t, i) => {
+                          const key = quoteKey(t);
+                          const q = quotes[key];
+                          return (
+                            <div key={i} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <div style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600, marginBottom: 6 }}>
+                                <span style={{ color: '#38bdf8' }}>Out:</span> {formatTripDateTime(t.hinflug_abflug_zeit)} <span style={{ color: '#94a3b8' }}>({t.hinflug_flight_number || '-'})</span>
+                              </div>
+                              <div style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600, marginBottom: 6 }}>
+                                <span style={{ color: '#38bdf8' }}>Ret:</span> {formatTripDateTime(t.rueckflug_abflug_zeit)} <span style={{ color: '#94a3b8' }}>({t.rueckflug_flight_number || '-'})</span>
+                              </div>
+                              <div style={{ fontSize: 13, color: '#38bdf8', fontWeight: 600, marginBottom: 8 }}>
+                                Dauer: {(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}
+                              </div>
+                              {q && q.status === 'done' && (
+                                <div style={{ fontSize: 12, color: '#38bdf8', fontWeight: 600, marginBottom: 6 }}>
+                                  {formatPrice(q.price_outbound)} · {formatPrice(q.price_return)} · {formatPrice(q.price_total)}{' '}
+                                  <span style={{ color: '#94a3b8', fontWeight: 400 }}>({relativeAge(q.fetched_at)})</span>
+                                </div>
+                              )}
+                              {q && q.status === 'error' && (
+                                <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 6 }}>
+                                  {q.error}{' '}
+                                  <button onClick={() => fetchQuote(t)} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0 }}>Retry</button>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <button onClick={() => fetchQuote(t)} disabled={q && (q.status === 'loading' || q.status === 'done')}
+                                  style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: q?.status === 'loading' ? '#64748b' : '#0ea5e9', color: '#fff', fontWeight: 600, fontSize: 12, cursor: q?.status === 'loading' || q?.status === 'done' ? 'not-allowed' : 'pointer', minWidth: 44, minHeight: 44, flex: 1 }}>
+                                  {q?.status === 'loading' ? '…fetching' : (q?.status === 'done' ? '✓ quoted' : 'Show price')}
+                                </button>
+                                <button onClick={() => addFavorite(t)} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>
+                                  {t.is_favorite ? '★ Favorited' : '+ Add'}
+                                </button>
+                              </div>
                             </div>
-                            <div style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600, marginBottom: 6 }}>
-                              <span style={{ color: '#38bdf8' }}>Ret:</span> {formatTripDateTime(t.rueckflug_abflug_zeit)} <span style={{ color: '#94a3b8' }}>({t.rueckflug_flight_number || '-'})</span>
-                            </div>
-                            <div style={{ fontSize: 13, color: '#38bdf8', fontWeight: 600, marginBottom: 8 }}>
-                              Dauer: {(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}
-                            </div>
-                            <button onClick={() => addFavorite(t)} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', width: '100%', minWidth: 44, minHeight: 44 }}>
-                              {t.is_favorite ? '★ Favorited' : '+ Add to favorites'}
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       // Table view for desktop (≥640px)
@@ -335,22 +402,47 @@ export default function TripsTab({ list, airportNames }) {
                             <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound Flight</th>
                             <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return Flight</th>
                             <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Trip Duration</th>
+                            <th style={{ textAlign: 'right', padding: '6px 8px', color: '#94a3b8' }}>Price</th>
                             <th style={{ textAlign: 'right', padding: '6px 8px', color: '#94a3b8' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {group.map((t, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                              <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.hinflug_abflug_zeit) + ' | ' + (t.hinflug_flight_number || '-')}</td>
-                              <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.rueckflug_abflug_zeit) + ' | ' + (t.rueckflug_flight_number || '-')}</td>
-                              <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
-                              <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                                <button onClick={() => addFavorite(t)} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>
-                                  {t.is_favorite ? '★ Favorited' : '+ Add'}
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {group.map((t, i) => {
+                            const key = quoteKey(t);
+                            const q = quotes[key];
+                            return (
+                              <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.hinflug_abflug_zeit) + ' | ' + (t.hinflug_flight_number || '-')}</td>
+                                <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.rueckflug_abflug_zeit) + ' | ' + (t.rueckflug_flight_number || '-')}</td>
+                                <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', minWidth: 120 }}>
+                                  {q && q.status === 'done' && (
+                                    <div style={{ color: '#38bdf8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                      {formatPrice(q.price_outbound)} · {formatPrice(q.price_return)} · {formatPrice(q.price_total)}
+                                      <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 10, marginLeft: 4 }}>({relativeAge(q.fetched_at)})</span>
+                                    </div>
+                                  )}
+                                  {q && q.status === 'error' && (
+                                    <div style={{ color: '#ef4444', fontSize: 11 }}>
+                                      {q.error}{' '}
+                                      <button onClick={() => fetchQuote(t)} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 11 }}>Retry</button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                  <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                                    <button onClick={() => fetchQuote(t)} disabled={q && (q.status === 'loading' || q.status === 'done')}
+                                      style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: q?.status === 'loading' ? '#64748b' : '#0ea5e9', color: '#fff', fontWeight: 600, fontSize: 11, cursor: q?.status === 'loading' || q?.status === 'done' ? 'not-allowed' : 'pointer', minWidth: 32, minHeight: 28 }}>
+                                      {q?.status === 'loading' ? '…' : (q?.status === 'done' ? '✓' : '€')}
+                                    </button>
+                                    <button onClick={() => addFavorite(t)} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 11, cursor: 'pointer', minWidth: 32, minHeight: 28 }}>
+                                      {t.is_favorite ? '★' : '+ Add'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}
