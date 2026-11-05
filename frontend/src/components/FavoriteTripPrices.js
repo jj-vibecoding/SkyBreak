@@ -4,25 +4,29 @@ import React, { useState, useEffect } from 'react';
 import ChartModal from './ChartModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useConfirm } from './Dialogs';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 export default function FavoriteTripPrices() {
   const isSmallScreen = useMediaQuery('(max-width: 639px)'); // Fix #19: responsive breakpoint
   const { showConfirm, ConfirmDialog } = useConfirm(); // Fix #12: replace window.confirm
+  
+  // Persist UI state in localStorage
+  const [sortKey, setSortKey] = useLocalStorage('favorites.sortKey', 'price_total');
+  const [sortDir, setSortDir] = useLocalStorage('favorites.sortDir', 'desc');
+  const [groupSortKey, setGroupSortKey] = useLocalStorage('favorites.groupSortKey', 'name');
+  const [groupSortDir, setGroupSortDir] = useLocalStorage('favorites.groupSortDir', 'asc');
+  const [filterStart, setFilterStart] = useLocalStorage('favorites.filterStart', '');
+  const [filterEnd, setFilterEnd] = useLocalStorage('favorites.filterEnd', '');
+  
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(false);
-  const [sortKey, setSortKey] = useState('price_total');
-  const [sortDir, setSortDir] = useState('desc');
-  const [groupSortKey, setGroupSortKey] = useState('name');
-  const [groupSortDir, setGroupSortDir] = useState('asc');
   const [chartOpen, setChartOpen] = useState(false);
   const [chartData, setChartData] = useState(null);
   const [expanded, setExpanded] = useState({});
   const [grpSortKey, setGrpSortKey] = useState({});
   const [grpSortDir, setGrpSortDir] = useState({});
-  const [filterStart, setFilterStart] = useState('');
-  const [filterEnd, setFilterEnd] = useState('');
   const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
   useEffect(() => {
