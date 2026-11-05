@@ -25,11 +25,20 @@ export default function FavoriteTripPrices() {
   const [filterEnd, setFilterEnd] = useState('');
   const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  const [pollActive, setPollActive] = useState(false);
-  useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { if (!pollActive) return; fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true); setPollActive(true);}else{setProgress(false); setPollActive(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [pollActive]);
+  useEffect(() => {
+    load();
+    let prevRunning = false;
+    const checkStatus = () => fetch('/api/prices/status').then(r=>r.json()).then(s=>{
+      if (s.running) { setProgress(true); prevRunning = true; }
+      else { if (prevRunning) { setProgress(false); load(); } prevRunning = false; }
+    }).catch(()=>{});
+    checkStatus(); // sofortigen Status beim Laden prüfen
+    const iv = setInterval(checkStatus, 1500);
+    return () => clearInterval(iv);
+  }, []);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
-  const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
-  const handleUpdateMissing = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices/missing', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
+  const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => { setProgress(false); }).finally(() => setUpdating(false)); };
+  const handleUpdateMissing = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices/missing', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => { setProgress(false); }).finally(() => setUpdating(false)); };
   const openChartFor = (tripId) => {
     const trip = prices.find(p => p.id === tripId || p.id == tripId);
     if (!trip) { setChartData([]); setChartOpen(true); return; }
@@ -67,24 +76,43 @@ export default function FavoriteTripPrices() {
       {label} {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
     </button>
   );
-  // Gruppierung nach Ziel (analog turnarounds)
+  // Gruppierung nach Ziel + Filterung + Sortierung (Sortierung erfolgt NACH dem Filtern)
   const groupsObj = {};
   prices.forEach(p => { const key = p.destination_airport || p.dest_city_country || '-'; if (!groupsObj[key]) groupsObj[key] = []; groupsObj[key].push(p); });
   // A→Z sortiert nach Stadtname, nicht nach IATA-Code
   const groupNames = {};
   Object.keys(groupsObj).forEach(k => { groupNames[k] = (groupsObj[k][0]?.dest_city_country || k); });
-  const groupKeys = Object.keys(groupsObj).sort((a, b) => {
-    if (groupSortKey === 'name') {
-      return groupSortDir === 'asc' ? groupNames[a].localeCompare(groupNames[b]) : groupNames[b].localeCompare(groupNames[a]);
-    }
-    // price_min: cheapest trip in each group first/last, nulls last
-    const minA = groupsObj[a].reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
-    const minB = groupsObj[b].reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
-    if (minA == null && minB == null) return 0;
-    if (minA == null) return 1;
-    if (minB == null) return -1;
-    return groupSortDir === 'asc' ? minA - minB : minB - minA;
-  });
+  const groupKeys = Object.keys(groupsObj)
+    .map(key => {
+      let grp = groupsObj[key];
+      if (filterStart) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') >= filterStart);
+      if (filterEnd) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') <= filterEnd);
+      return { key, grp };
+    })
+    .filter(entry => entry.grp.length > 0)
+    .sort((a, b) => {
+      if (groupSortKey === 'name') {
+        const na = groupNames[a.key] || a.key;
+        const nb = groupNames[b.key] || b.key;
+        return groupSortDir === 'asc' ? na.localeCompare(nb) : nb.localeCompare(na);
+      }
+      // price_min: cheapest trip in each (filtered) group first/last, nulls last
+      const minA = a.grp.reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
+      const minB = b.grp.reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m)) ? p.price_total : m, null);
+      if (minA == null && minB == null) return 0;
+      if (minA == null) return 1;
+      if (minB == null) return -1;
+      return groupSortDir === 'asc' ? minA - minB : minB - minA;
+    })
+    .map(entry => entry.key);
+
+  // Helper: get filtered group for a key (used in render)
+  const getFilteredGroup = (key) => {
+    let grp = groupsObj[key] || [];
+    if (filterStart) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') >= filterStart);
+    if (filterEnd) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') <= filterEnd);
+    return grp;
+  };
 
   return (
     <div>
@@ -98,8 +126,8 @@ export default function FavoriteTripPrices() {
         <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom: 8, alignItems:'center' }}>
           <label style={{ color:'#94a3b8', fontSize:12, marginRight:4 }}>Sort groups:</label>
           <button onClick={() => { setGroupSortKey('name'); setGroupSortDir('asc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='name' && groupSortDir==='asc' ? '#38bdf8' : '#475569', color: groupSortKey==='name' && groupSortDir==='asc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>A→Z</button>
-          <button onClick={() => { setGroupSortKey('price_min'); setGroupSortDir('asc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='price_min' && groupSortDir==='asc' ? '#38bdf8' : '#475569', color: groupSortKey==='price_min' && groupSortDir==='asc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>Price ↑</button>
-          <button onClick={() => { setGroupSortKey('price_min'); setGroupSortDir('desc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='price_min' && groupSortDir==='desc' ? '#38bdf8' : '#475569', color: groupSortKey==='price_min' && groupSortDir==='desc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>Price ↓</button>
+          <button onClick={() => { setGroupSortKey('price_total'); setGroupSortDir('asc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='price_total' && groupSortDir==='asc' ? '#38bdf8' : '#475569', color: groupSortKey==='price_total' && groupSortDir==='asc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>Price ↑</button>
+          <button onClick={() => { setGroupSortKey('price_total'); setGroupSortDir('desc'); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background: groupSortKey==='price_total' && groupSortDir==='desc' ? '#38bdf8' : '#475569', color: groupSortKey==='price_total' && groupSortDir==='desc' ? '#0f172a' : '#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer' }}>Price ↓</button>
         </div>
         <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8, marginRight: 10 }}>
           {progress || updating ? 'Updating prices... (running)' : 'Update all prices'}
@@ -108,9 +136,7 @@ export default function FavoriteTripPrices() {
           {progress || updating ? 'Updating prices... (running)' : 'Update missing prices'}
         </button>
         {groupKeys.map(key => {
-          let grp = groupsObj[key];
-          if (filterStart) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') >= filterStart);
-          if (filterEnd) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') <= filterEnd);
+          const grp = getFilteredGroup(key);
           if (!grp.length) return null;
           const isOpen = !!expanded['price_' + key];
           const cheapest = grp.reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m.price_total)) ? p : m, null);

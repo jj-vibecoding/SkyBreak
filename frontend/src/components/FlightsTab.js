@@ -68,6 +68,10 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
           style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
           Today
         </button>
+        <button disabled={fetchRunning} onClick={onFetchNow}
+          style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: fetchRunning ? '#475569' : '#10b981', color: '#fff', fontWeight: 700, cursor: fetchRunning ? 'not-allowed' : 'pointer', fontSize: 13 }}>
+          {fetchRunning ? 'Fetching...' : 'Fetch Now'}
+        </button>
       </div>
 
       {list.map(airport => {
