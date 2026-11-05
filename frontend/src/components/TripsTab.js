@@ -10,8 +10,8 @@ import { useConfirm } from './Dialogs';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const sectionStyle = {
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+  background: 'transparent', border: 'none',
+  borderRadius: 0, padding: 24, boxShadow: 'none',
 };
 
 const fieldStyle = {
