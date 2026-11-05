@@ -668,6 +668,214 @@ def update_missing_prices():
     return jsonify({"updated": True, "running": True})
 
 
+# ── Health Dashboard ────────────────────────────────────────────────────────
+
+# Secret keys that must never appear in backup exports.
+_SECRET_KEYS = frozenset(("telegram_bot_token",))
+
+
+@app.route("/api/health")
+def health():
+    """Health dashboard data: run logs, airport freshness, context counts."""
+    conn = connect_db()
+
+    # DB version
+    try:
+        db_version = conn.execute("SELECT version FROM db_version LIMIT 1").fetchone()[0]
+    except Exception:
+        db_version = 0
+
+    # Airports with max departure and stale flag
+    fetch_max_months_raw = get_setting("fetch_max_months") or "3"
+    try:
+        fetch_max_months = int(fetch_max_months_raw)
+    except Exception:
+        fetch_max_months = 3
+    fetch_max_months = max(1, min(fetch_max_months, 12))
+
+    # Window = today + fetch_max_months * 30 days, minus 7 day grace
+    now_dt = datetime.now(timezone.utc)
+    window_end = (now_dt + timedelta(days=fetch_max_months * 30 - 7)).isoformat()
+
+    airports_rows = conn.execute(
+        "SELECT a.code, COALESCE(a.name, ''), MAX(f.departure_time) AS max_dep "
+        "FROM airports a LEFT JOIN flights f ON f.airport_icao = a.code "
+        "GROUP BY a.code"
+    ).fetchall()
+    airports = []
+    for code, name, max_dep in airports_rows:
+        stale = False
+        if max_dep:
+            try:
+                dep_str = str(max_dep).replace("Z", "+00:00")
+                dep_dt = datetime.fromisoformat(dep_str)
+                if dep_dt.tzinfo is None:
+                    dep_dt = dep_dt.replace(tzinfo=timezone.utc)
+                stale = dep_dt < datetime.fromisoformat(window_end)
+            except Exception:
+                stale = True
+        airports.append({
+            "code": code,
+            "name": name or code,
+            "max_departure": max_dep,
+            "stale": stale,
+        })
+
+    # Last scrape run
+    try:
+        sr = conn.execute(
+            "SELECT started_at, finished_at, status, airports, flights_saved "
+            "FROM scrape_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        last_scrape = {
+            "started_at": sr[0],
+            "finished_at": sr[1],
+            "status": sr[2],
+            "airports": sr[3],
+            "flights_saved": sr[4],
+        } if sr else None
+    except Exception:
+        last_scrape = None
+
+    # Last price run
+    try:
+        pr = conn.execute(
+            "SELECT started_at, finished_at, status, total, success, failed "
+            "FROM price_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        last_price_run = {
+            "started_at": pr[0],
+            "finished_at": pr[1],
+            "status": pr[2],
+            "total": pr[3],
+            "success": pr[4],
+            "failed": pr[5],
+        } if pr else None
+    except Exception:
+        last_price_run = None
+
+    # Context counts
+    try:
+        favorites_total = conn.execute("SELECT COUNT(*) FROM favorite_trips").fetchone()[0]
+    except Exception:
+        favorites_total = 0
+    try:
+        quotes_cached = conn.execute("SELECT COUNT(*) FROM trip_price_quotes").fetchone()[0]
+    except Exception:
+        quotes_cached = 0
+
+    conn.close()
+
+    return jsonify({
+        "db_version": db_version,
+        "airports": airports,
+        "last_scrape": last_scrape,
+        "last_price_run": last_price_run,
+        "favorites_total": favorites_total,
+        "quotes_cached": quotes_cached,
+        "fetch_max_months": fetch_max_months,
+    })
+
+
+# ── Backup Export / Import ──────────────────────────────────────────────────
+
+_USER_TABLES = [
+    "airports",
+    "favorite_trips",
+    "trip_search_configs",
+    "settings",
+]
+
+
+@app.route("/api/backup/export")
+def backup_export():
+    """Export user data as JSON (no flights, no secrets)."""
+    conn = connect_db()
+
+    try:
+        db_version_row = conn.execute("SELECT version FROM db_version LIMIT 1").fetchone()
+        db_version = db_version_row[0] if db_version_row else 0
+    except Exception:
+        db_version = 0
+
+    result = {
+        "version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "db_version": db_version,
+    }
+
+    for table in _USER_TABLES:
+        try:
+            rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+            # PRAGMA table_info returns (cid, name, type, notnull, dflt_value, pk)
+            desc = [d[1] for d in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+            result[table] = [dict(zip(desc, r)) for r in rows]
+        except Exception:
+            result[table] = []
+
+    # Filter secrets from settings
+    if "settings" in result:
+        result["settings"] = [
+            s for s in result["settings"] if s.get("key") not in _SECRET_KEYS
+        ]
+
+    conn.close()
+    return jsonify(result)
+
+
+@app.route("/api/backup/import", methods=["POST"])
+def backup_import():
+    """Import user data from JSON (upsert by natural keys, transactional)."""
+    data = request.get_json(force=True)
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid payload: expected object"}), 400
+
+    export_version = data.get("version")
+    if export_version is None or export_version != 1:
+        return jsonify({"error": f"Unsupported export version: {export_version}"}), 400
+
+    required_tables = {"airports", "favorite_trips", "trip_search_configs", "settings"}
+    missing = required_tables - set(data.keys())
+    if missing:
+        return jsonify({"error": f"Missing tables: {', '.join(sorted(missing))}"}), 400
+
+    conn = connect_db()
+    try:
+        imported = {}
+        for table in _USER_TABLES:
+            items = data.get(table, [])
+            if not isinstance(items, list):
+                continue
+            count = 0
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                keys = list(item.keys())
+                values = [item[k] for k in keys]
+                placeholders = ", ".join("?" * len(keys))
+                col_list = ", ".join(keys)
+                try:
+                    conn.execute(
+                        f"INSERT OR REPLACE INTO {table} ({col_list}) "
+                        f"VALUES ({placeholders})",
+                        values,
+                    )
+                    count += 1
+                except Exception:
+                    pass  # skip malformed rows
+            imported[table] = count
+
+        conn.commit()
+        return jsonify({
+            "imported_tables": imported,
+            "message": f"Imported {sum(imported.values())} total rows",
+        })
+    except Exception as e:
+        conn.rollback()
+        logger.error("Backup import failed: %s", e)
+        return jsonify({"error": f"Import failed: {e}"}), 500
+
 
 if __name__ == "__main__":
     # Migrations already applied at module load (line 65); start scheduler and serve.

@@ -9,7 +9,7 @@ def test_app_js_wires_decomposition():
     # of holding all state itself. CollapsibleSidebar was replaced by the
     # responsive drawer (D3) implemented directly in App.js.
     for name in ["AirportsTab", "FlightsTab",
-                 "TripsTab", "FavoriteTripPrices", "SettingsTab"]:
+                 "TripsTab", "FavoriteTripPrices", "SettingsTab", "StatusTab"]:
         assert f"import {name}" in app, f"App.js must import {name}"
     assert "from './hooks/useActiveTab'" in app
     assert "from './hooks/useAirports'" in app
