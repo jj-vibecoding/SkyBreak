@@ -25,7 +25,17 @@ export default function FavoriteTripPrices() {
   const [filterEnd, setFilterEnd] = useState('');
   const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true);}else{if(prevRunning){setProgress(false);load();} } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
+  useEffect(() => {
+    load();
+    let prevRunning = false;
+    const checkStatus = () => fetch('/api/prices/status').then(r=>r.json()).then(s=>{
+      if (s.running) { setProgress(true); prevRunning = true; }
+      else { if (prevRunning) { setProgress(false); load(); } prevRunning = false; }
+    }).catch(()=>{});
+    checkStatus(); // sofortigen Status beim Laden prüfen
+    const iv = setInterval(checkStatus, 1500);
+    return () => clearInterval(iv);
+  }, []);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
   const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => { setProgress(false); }).finally(() => setUpdating(false)); };
   const handleUpdateMissing = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices/missing', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => { setProgress(false); }).finally(() => setUpdating(false)); };
