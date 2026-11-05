@@ -1,29 +1,16 @@
 # Goal
-Create a feature branch and implement persistence for date pickers and airport selections on the Trips and Favorites pages in browser localStorage.
+Complete code review and documentation cleanup (2026-11-05).
 
 ## Done
-- Feature branch created: `feature/persist-date-pickers-airports`
-- New hook `useLocalStorage.js` implemented for localStorage persistence
-- TripsTab component updated: 10 state variables persisted (airports, dates, weekdays, search params)
-- FavoriteTripPrices component updated: 6 state variables persisted (filters, sorting preferences)
-- Comprehensive tests added: 11 new tests covering hook functionality and integration
-- All existing tests pass (122/122), new tests pass (11/11)
-- Frontend builds successfully with new persistence
-- Documentation created: PERSISTENCE_DEMO.md, IMPLEMENTATION_SUMMARY.md
+- Removed all obsolete design docs from `doc/designs/` (all from merged PRs)
+- Removed all obsolete plan docs from `doc/plans/` (all from merged PRs)
+- Deleted stale standalone docs: IMPLEMENTATION_SUMMARY.md, PERSISTENCE_DEMO.md, doc/updates.md, CI-CONFIG.md
+- Rewrote `doc/user-stories.md`: removed copy-paste errors, removed Telegram story (not implemented), added Status fields to all stories, cleaned up acceptance criteria
+- Updated `doc/architecture.md`: fixed tab list (no "Costs" tab), marked all features as implemented, added missing routes/tables, updated tech stack (Python 3.13, playwright scraper)
+- Cleaned `AGENTS.md`: removed outdated session learnings, kept workflow rules + DB migration + container config
+- Updated `README.md`: expanded features list to match actual implementation
 
-## Ruled out
-- No need for server-side storage (localStorage is sufficient)
-- No need for complex migration (backward compatible)
-- No need for database changes
-- No need for additional UI controls (automatic persistence)
-
-## Open
-- Ready for code review and merge to main
-- Ready for deployment (rebuild Docker image, restart container)
-
-## Key Benefits Delivered
-1. User Experience: Preferences persist across page refreshes and sessions
-2. Performance: No server round-trips for simple UI state
-3. Privacy: Data stays in browser
-4. Compatibility: Works offline and with multiple tabs
-5. Maintainability: Clean, reusable hook pattern
+## Verification
+- All 130 tests passing (2 skipped), 0 failures
+- Remaining docs: AGENTS.md, README.md, doc/user-stories.md, doc/architecture.md
+- Empty directories preserved for future use: doc/designs/, doc/plans/

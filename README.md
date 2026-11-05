@@ -5,10 +5,13 @@
 A tool for planning short trips and weekend getaways by air.
 
 ## Features
-- ✈️ Flight schedule browsing (departures & arrivals) with date filtering
-- 💰 Price tracking for favorite trips, including price history chart
-- 📅 Trip planning with minimum trip length and turnaround (return-flight) matching
-- 📍 Monitored airports with automatic periodic flight fetching (background scheduler)
+- ✈️ **Airport Management** — Add, list, and delete monitored airports with IATA validation
+- 🛫 **Flight Schedule** — Browse departures/arrivals with date filtering; fetch latest data on demand
+- 🧳 **Trip Planning** — Search turnarounds (outbound + return) with configurable weekdays, times, and trip duration
+- ⭐ **Favorites** — Save trips, track price history, view interactive charts
+- 💰 **Price Monitoring** — Automatic background price checks at configurable intervals
+- 🔍 **Saved Search Configs** — Save and reload named trip search configurations (server-side)
+- 📱 **Responsive UI** — Works on desktop and mobile with localStorage persistence
 
 ## Quick Start (Docker — recommended)
 ```bash

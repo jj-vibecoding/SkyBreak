@@ -1,9 +1,8 @@
 # KI / Agent Anweisungen — Workflow
-1. Vor Erstellen eines Feature-Branch: git pull origin main (main immer gepufft/aktuell)
-2. Erst Design-Dokument unter `doc/designs/<Feature>.md` (kein globales DESIGN.md) — feature-basiert benannt
+
 ## Pflicht-Regeln (für alle Änderungen)
-1. Immer Feature-Branch erstellen (`git checkout -b ...`)
-2. Erst Design-Dokument unter `doc/designs/<Feature>.md`
+1. Feature-Branch erstellen wenn angemessen (`git checkout -b ...`) — nicht für jeden Hotfix erforderlich
+2. Erst Design-Dokument (`doc/designs/<Feature>.md`) — bei Features und signifikanten Änderungen
 3. Design-Review gegen User Stories (`doc/user-stories.md`) + Architektur (`doc/architecture.md`)
 4. Iteriere Design + Review bis Kompatibilität bestätigt
 5. Konkreter Implementierungsplan (`doc/plans/<Feature>.md`)
@@ -12,10 +11,9 @@
 8. Tests ZUERST schreiben (`tests/test_...`)
 9. Feature implementieren
 10. Tests ausführen (`python -m pytest`)
-11. PR erstellen (`create_pull_request`)
-12. GitHub Actions validieren (Workflow prüfen / `gh run`)
-13. PR mergen wenn ok
-14. PR nur mit expliziter Zustimmung des Benutzers erstellen (keine automatischen PRs)
+11. PR erstellen (`create_pull_request`) — nur wenn erforderlich (Feature/Release); direkte Push nur bei expliziter Zustimmung
+12. GitHub Actions validieren (Workflow prüfen / `gh run`) — bei PRs oder nach direktem Push
+13. PR mergen wenn ok / bei direktem Push auf Main: sofortige Validierung
 
 ## Design-Review-Checkliste
 - [ ] User Stories abgedeckt?
@@ -31,20 +29,16 @@
 ## Database Migration Requirement
 The container must handle an empty/missing database file.
 The container must migrate an existing db on its own to the latest schema.
---- Session Learnings (2026-09-22) ---
-ARCHITECTURE: React/Flask/SQLite (doc/architecture.md corrected); deleted doc/designs/ doc/plans/; preserved user-stories.md
-DB/CONTAINER: DB_FILE=/data/skybreak.db; init_db() handles schema at startup; Dockerfile must NOT run init_db at build (user requirement)
-DOCKER SOCKET: /var/run/docker.sock available; requires sudo (user openhands not in docker group)
-FRONTEND: FRONTEND_BUILD_DIR=/app/frontend/build; Dockerfile builds via npm; Flask serves static correctly
-VERIFICATION: pytest partial (18/21); Docker build ok (skybreak-local); container persistence verified via /data volume mount; DB tables persist after rm/recreate
-CLEANUP: Remove test containers/volumes; keep production image; never commit DB/test artifacts
-DB MIGRATION: Empty/missing /data/skybreak.db => create; existing => migrate (add airport_name, etc.)
-- All 23 tests passing (fixed DB_PATH in tests, init_db schema, fixture dates, assertions)
 
-
-## DB Migration Rules (2026-09-25)
+## DB Migration Rules
 1. Schema version saved in DB table `db_version`.
-2. Every DB change needs own migration step increasing version; apply at startup via `skybreak/db_migrate.py`.
+2. Every schema change needs own migration step increasing version; apply at startup via `skybreak/db_migrate.py`.
 3. Remove unused DB/init scripts; runtime must use only `db_migrate.apply_migrations()`.
 4. Future migrations: add `migration_v*` in `db_migrate.py`, update version, deploy via image rebuild.
 5. Never live-patch DB/container; changes only through source + docker build + redeploy.
+
+## Container Config
+- Port: 8088 (mapped to container 80, App: flightbreak)
+- Mount: /opt/skybreak (DB_FILE=/opt/skybreak/skybreak.db)
+- Container name: flightbreak
+- Image: skybreak-local
