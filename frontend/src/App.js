@@ -274,12 +274,7 @@ export default function App() {
             {tab === 'airports' && <Layout title="Airports"><AirportsTab list={list} setList={setList} /></Layout>}
 
             {tab === 'flights' && (
-              <Layout title="Flight Schedule" actions={
-                <button disabled={scrapeRunning} onClick={handleFetchNow}
-                  style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: scrapeRunning ? '#475569' : '#10b981', color: '#fff', fontWeight: 700, cursor: scrapeRunning ? 'not-allowed' : 'pointer', fontSize: 13 }}>
-                  {scrapeRunning ? 'Fetching...' : 'Fetch Now'}
-                </button>
-              }>
+              <Layout title="Flight Schedule">
                 <FlightsTab list={list} onFetchNow={handleFetchNow} fetchRunning={scrapeRunning} />
               </Layout>
             )}
