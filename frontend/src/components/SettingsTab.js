@@ -13,7 +13,8 @@ const SOCS_DEFAULT = 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg';
 export default function SettingsTab() {
   const [settings, setSettings] = useState({
     fetch_max_months: '1', scrape_delay_ms: '500',
-    price_fetch_interval_hours: '6', google_consent_cookie: SOCS_DEFAULT,
+    price_fetch_interval_hours: '6', refresh_interval_days: '7',
+    google_consent_cookie: SOCS_DEFAULT,
   });
   const [saving, setSaving] = useState(false);
 
@@ -23,6 +24,7 @@ export default function SettingsTab() {
         fetch_max_months: data.fetch_max_months || data.fetch_max_days || '1',
         scrape_delay_ms: data.scrape_delay_ms || '500',
         price_fetch_interval_hours: data.price_fetch_interval_hours || '6',
+        refresh_interval_days: data.refresh_interval_days || '7',
         google_consent_cookie: data.google_consent_cookie || SOCS_DEFAULT,
       });
     }).catch(() => {});
@@ -41,6 +43,7 @@ export default function SettingsTab() {
       fetch_max_months: settings.fetch_max_months,
       scrape_delay_ms: settings.scrape_delay_ms,
       price_fetch_interval_hours: settings.price_fetch_interval_hours,
+      refresh_interval_days: settings.refresh_interval_days,
       google_consent_cookie: settings.google_consent_cookie,
     };
     const res = await fetch('/api/settings', {
@@ -74,6 +77,13 @@ export default function SettingsTab() {
           <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>How often favorite prices are updated automatically. Default 6h.</p>
           <input id="priceIntervalHours" type="number" min="1" max="168" value={settings.price_fetch_interval_hours || '6'}
             onChange={e => setSettings(s => ({ ...s, price_fetch_interval_hours: e.target.value }))} placeholder="Hours"
+            style={{ ...inputStyle, width: 140, fontSize: 14 }} />
+        </div>
+        <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Flight Schedule Refresh (Days)</h4>
+          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>How often flight schedules are refreshed automatically. Set to 0 to disable. Default 7 days.</p>
+          <input id="refreshIntervalDays" type="number" min="0" max="365" value={settings.refresh_interval_days || '7'}
+            onChange={e => setSettings(s => ({ ...s, refresh_interval_days: e.target.value }))} placeholder="Days"
             style={{ ...inputStyle, width: 140, fontSize: 14 }} />
         </div>
         <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>

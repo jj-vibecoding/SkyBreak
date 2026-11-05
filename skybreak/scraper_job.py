@@ -153,6 +153,41 @@ def start_price_scheduler():
     except Exception as e:
         logger.error("Preis-Scheduler konnte nicht gestartet werden: %s", e)
 
+
+def start_refresh_scheduler():
+    """Start a background scheduler that refreshes all flight schedules.
+
+    Reads ``refresh_interval_days`` from settings (default 7).
+    Interval <= 0 disables the scheduler and returns None.
+    Returns the BackgroundScheduler instance when started, or None when disabled.
+    """
+    from apscheduler.schedulers.background import BackgroundScheduler
+    try:
+        interval = int(get_setting("refresh_interval_days") or "7")
+    except Exception as e:
+        logger.error("Fehler beim Lesen des Refresh-Intervalls: %s", e)
+        interval = 7
+    if interval <= 0:
+        logger.info("Refresh-Scheduler deaktiviert (intervall <= 0)")
+        return None
+    try:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            scrape_all_airports,
+            "interval",
+            days=interval,
+            id="refresh_scheduler",
+            coalesce=True,
+            max_instances=1,
+        )
+        scheduler.start()
+        logger.info("Refresh-Scheduler gestartet: alle %d Tage", interval)
+        return scheduler
+    except Exception as e:
+        logger.error("Refresh-Scheduler konnte nicht gestartet werden: %s", e)
+        return None
+
+
 def scrape_favorite_prices():
     """Preise aller favorisierten Trips abfragen und in ``price_runs`` loggen."""
     logger.info("Starting automatic price update for all favorites")

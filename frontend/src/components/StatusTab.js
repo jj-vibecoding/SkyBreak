@@ -175,6 +175,9 @@ export default function StatusTab() {
             DB Version: <strong>v{health.db_version}</strong>
           </div>
           <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4 }}>
+            Flights: <strong>{health.flights_total ?? '—'}</strong>
+          </div>
+          <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4 }}>
             Favorites: {health.favorites_total}
           </div>
           <div style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4 }}>

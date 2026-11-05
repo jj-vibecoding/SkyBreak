@@ -756,6 +756,10 @@ def health():
 
     # Context counts
     try:
+        flights_total = conn.execute("SELECT COUNT(*) FROM flights").fetchone()[0]
+    except Exception:
+        flights_total = 0
+    try:
         favorites_total = conn.execute("SELECT COUNT(*) FROM favorite_trips").fetchone()[0]
     except Exception:
         favorites_total = 0
@@ -771,6 +775,7 @@ def health():
         "airports": airports,
         "last_scrape": last_scrape,
         "last_price_run": last_price_run,
+        "flights_total": flights_total,
         "favorites_total": favorites_total,
         "quotes_cached": quotes_cached,
         "fetch_max_months": fetch_max_months,
@@ -877,11 +882,28 @@ def backup_import():
         return jsonify({"error": f"Import failed: {e}"}), 500
 
 
+# ── Refresh-status endpoint ──────────────────────────────────────────────────
+
+
+@app.route("/api/refresh-status", methods=["GET"])
+def refresh_status():
+    """Return the current refresh scheduler configuration and enabled state."""
+    try:
+        interval = int(get_setting("refresh_interval_days") or "7")
+    except Exception:
+        interval = 7
+    return jsonify({
+        "interval_days": interval,
+        "enabled": interval > 0,
+    })
+
+
 if __name__ == "__main__":
-    # Migrations already applied at module load (line 65); start scheduler and serve.
-    from skybreak.scraper_job import start_price_scheduler
+    # Migrations already applied at module load (line 65); start schedulers and serve.
+    from skybreak.scraper_job import start_price_scheduler, start_refresh_scheduler
 
     start_price_scheduler()
+    start_refresh_scheduler()
     app.run(host="0.0.0.0", port=80)
 
 # Batch restructuring implemented

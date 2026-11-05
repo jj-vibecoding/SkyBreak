@@ -22,6 +22,7 @@ SETTINGS_WHITELIST = (
     "favorite_max_items",
     "google_consent_cookie",
     "price_fetch_interval_hours",
+    "refresh_interval_days",
 )
 
 GOOGLE_CONSENT_COOKIE = "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"
@@ -371,8 +372,9 @@ def apply_migrations(path: str | None = None):
             "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
             ("google_consent_cookie", GOOGLE_CONSENT_COOKIE),
         )
-        # Seed the defaults the price scheduler and scraper read on first run.
-        for key, default in (("price_fetch_interval_hours", "6"), ("fetch_max_months", "3")):
+        # Seed the defaults the price scheduler, scraper and refresh scheduler read on first run.
+        for key, default in (("price_fetch_interval_hours", "6"), ("fetch_max_months", "3"),
+                             ("refresh_interval_days", "7")):
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, default))
         conn.commit()
     finally:
