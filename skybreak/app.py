@@ -1,5 +1,6 @@
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 from datetime import datetime, timedelta, timezone
 import os
@@ -182,6 +183,44 @@ def price_history():
     {"date": r[0], "outbound_price": r[1], "return_price": r[2], "total_price": r[3]}
     for r in rows
     ])
+
+
+@app.route("/api/prices/quote", methods=["POST"])
+def quote_trip_endpoint():
+    """On-demand price quote for a candidate turnaround trip.
+
+    Body: {start_airport, destination_airport, outbound_date, return_date,
+           outbound_flight_number, return_flight_number}
+    """
+    data = request.get_json(force=True)
+    start = (data.get("start_airport") or "").strip().upper()
+    dest = (data.get("destination_airport") or "").strip().upper()
+    out_date = (data.get("outbound_date") or "").strip()
+    ret_date = (data.get("return_date") or "").strip()
+    out_fnum = (data.get("outbound_flight_number") or "").strip()
+    ret_fnum = (data.get("return_flight_number") or "").strip()
+
+    # Validate IATA codes
+    for code, label in [(start, "start_airport"), (dest, "destination_airport")]:
+        if not validate_iata(code):
+            return jsonify({"error": f"Invalid {label}: {code!r}"}), 400
+
+    # Validate dates (YYYY-MM-DD)
+    for date_str, label in [(out_date, "outbound_date"), (ret_date, "return_date")]:
+        if date_str:
+            try:
+                datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                return jsonify({"error": f"Invalid {label}: {date_str!r} (expected YYYY-MM-DD)"}), 400
+
+    try:
+        from skybreak.trip_quotes import quote_trip as _quote_trip
+        result = _quote_trip(start, dest, out_date, ret_date, out_fnum, ret_fnum)
+        return jsonify(result), 200
+    except RuntimeError as e:
+        # Scraper HTTP error / consent page → 502
+        logger.error("Quote scraper error: %s", e)
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/api/flights/fetch-now", methods=["POST"])

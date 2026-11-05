@@ -275,10 +275,39 @@ def migration_v13(conn):
     _bump(conn, 13)
 
 
+def migration_v14(conn):
+    """On-demand price quotes for candidate trips (TripsTab).
+
+    Stores user-initiated quotes with 1 h freshness so the same turn-around
+    doesn't hammer Google Flights on every page view.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trip_price_quotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            start_airport TEXT NOT NULL,
+            destination_airport TEXT NOT NULL,
+            outbound_date TEXT NOT NULL,
+            return_date TEXT NOT NULL,
+            outbound_flight_number TEXT NOT NULL,
+            return_flight_number TEXT NOT NULL,
+            price_outbound REAL,
+            price_return REAL,
+            price_total REAL,
+            currency TEXT DEFAULT 'EUR',
+            fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(start_airport, destination_airport, outbound_date,
+                   return_date, outbound_flight_number, return_flight_number)
+        )
+        """
+    )
+    _bump(conn, 14)
+
+
 MIGRATIONS = [
     migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
     migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
-    migration_v11, migration_v12, migration_v13,
+    migration_v11, migration_v12, migration_v13, migration_v14,
 ]
 
 
