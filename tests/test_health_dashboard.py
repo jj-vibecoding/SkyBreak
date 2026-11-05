@@ -181,7 +181,7 @@ class TestBackupExport:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["version"] == 1
-        assert data["db_version"] == 15
+        assert data["db_version"] == 16
         assert any(a["code"] == "FRA" for a in data["airports"])
         assert any(f["destination_airport"] == "CDG" for f in data["favorite_trips"])
         assert any(c["name"] == "MyConfig" for c in data["trip_search_configs"])
