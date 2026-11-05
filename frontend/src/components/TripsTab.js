@@ -1,6 +1,11 @@
+// D4/D5/D12: Responsive TripsTab — weekday chips (Fix #4),
+//        trip cards <640px / table ≥640px (Fix #5), Actions header (Fix #18),
+//        toast/confirm dialogs (Fix #12), English UI (Fix #16).
 import React, { useState, useEffect } from 'react';
 import { formatTripDateTime } from '../utils/format';
 import { useTripConfigs } from '../hooks/useTripConfigs';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useConfirm } from './Dialogs';
 
 const sectionStyle = {
   background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
@@ -15,6 +20,16 @@ const controlStyle = {
   width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
   background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14,
   boxSizing: 'border-box', maxWidth: '100%',
+};
+const chipActiveStyle = {
+  padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(56,189,248,0.4)',
+  background: 'rgba(56,189,248,0.15)', color: '#38bdf8', fontWeight: 700, fontSize: 13,
+  cursor: 'pointer', minWidth: 44, minHeight: 44,
+};
+const chipInactiveStyle = {
+  padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+  background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', fontWeight: 600, fontSize: 13,
+  cursor: 'pointer', minWidth: 44, minHeight: 44,
 };
 const saveButtonStyle = {
   padding: '8px 14px', borderRadius: 8, border: 'none', background: '#10b981',
@@ -47,6 +62,8 @@ function payloadFromTurnaround(t, startAirport) {
 // Trip turnaround finder: date-range / weekday form plus grouped results, with
 // add-to-favorites. `list`/`airportNames` are the shared airport data.
 export default function TripsTab({ list, airportNames }) {
+  const isSmallScreen = useMediaQuery('(max-width: 639px)'); // Fix #5: cards below 640px
+  const { showConfirm, ConfirmDialog } = useConfirm(); // Fix #12: replace window.confirm
   const [startAirport, setStartAirport] = useState('');
   const [endAirport, setEndAirport] = useState('');
   const [tripStart, setTripStart] = useState(new Date().toISOString().split('T')[0]);
@@ -79,9 +96,12 @@ export default function TripsTab({ list, airportNames }) {
       return;
     }
     const existing = savedConfigs.find(c => c.name.toLowerCase() === configName.trim().toLowerCase());
-    if (existing && !confirm(`Configuration "${configName.trim()}" already exists. Overwrite it?`)) {
-      setConfigMessage('Overwrite cancelled — nothing was saved.');
-      return;
+    if (existing) {
+      const ok = await showConfirm('Overwrite Configuration?', `Configuration "${configName.trim()}" already exists. Overwrite it?`);
+      if (!ok) {
+        setConfigMessage('Overwrite cancelled — nothing was saved.');
+        return;
+      }
     }
     const result = await saveConfig({ name: configName.trim(), ...currentSearch });
     if (result.ok) {
@@ -108,7 +128,8 @@ export default function TripsTab({ list, airportNames }) {
 
   const handleDeleteConfig = async () => {
     if (!selectedConfig) { setConfigMessage('Select a configuration to delete.'); return; }
-    if (!confirm(`Delete configuration "${selectedConfig}"?`)) { setConfigMessage('Delete cancelled.'); return; }
+    const ok = await showConfirm('Delete Configuration', `Delete configuration "${selectedConfig}"?`);
+    if (!ok) { setConfigMessage('Delete cancelled.'); return; }
     const result = await removeConfig(selectedConfig);
     setSelectedConfig('');
     setConfigMessage(result.ok
@@ -117,12 +138,12 @@ export default function TripsTab({ list, airportNames }) {
   };
 
   useEffect(() => {
-    if (tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep && maxTripDays && minTripDays) {
+    if (tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep) {
       const params = new URLSearchParams({
         start: tripStart, end: tripEnd,
         start_days: startWeekdays.join(','), end_days: endWeekdays.join(','),
         max_dep_dest: maxDepToDest, min_ret_dep: minRetDep,
-        max_trip_days: maxTripDays, min_trip_days: minTripDays,
+        max_trip_days: maxTripDays || 30, min_trip_days: minTripDays || 1,
       });
       if (startAirport) params.append('start_airport', startAirport);
       if (endAirport) params.append('end_airport', endAirport);
@@ -149,7 +170,8 @@ export default function TripsTab({ list, airportNames }) {
   };
 
   const addAllFavorites = async (group) => {
-    if (!confirm('Add all trips in this group to favorites?')) return;
+    const ok = await showConfirm('Add to Favorites', 'Add all trips in this group to favorites?');
+    if (!ok) return;
     for (const t of group) await addFavorite(t);
   };
 
@@ -157,20 +179,41 @@ export default function TripsTab({ list, airportNames }) {
   turnarounds.forEach(t => { const key = t.hinflug_ziel || t.destination || '-'; if (!groups[key]) groups[key] = []; groups[key].push(t); });
   const groupKeys = Object.keys(groups).sort();
 
-  const selectWeekdays = (value, onChange) => (
-    <select multiple value={value.map(String)}
-      onChange={e => onChange([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))}
-      style={{ ...controlStyle, height: 160, overflow: 'auto' }}>
-      {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-    </select>
+  // Fix #4: Weekday chips replacing <select multiple>
+  const renderChips = (label, value, onChange) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {WEEKDAYS.map((day, i) => {
+        const isActive = value.includes(i);
+        return (
+          <button key={i} onClick={() => onChange(isActive ? value.filter(v => v !== i) : [...value, i])}
+            style={isActive ? chipActiveStyle : chipInactiveStyle} aria-pressed={isActive}>
+            {day.slice(0, 3)}
+          </button>
+        );
+      })}
+    </div>
   );
 
+  // On mobile: completely flat layout — no borderRadius anywhere.
+  // iOS Safari clips rendering of nested border-radius values causing visual bleed.
+  // Removing all rounded corners on mobile eliminates the artifact entirely.
+  const sectionStyleFlat = isSmallScreen
+    ? { ...sectionStyle, borderRadius: 0 }
+    : sectionStyle;
+
+  const fieldBoxStyle = (p) => ({
+    background: 'rgba(255,255,255,0.03)',
+    borderRadius: 0,
+    padding: p != null ? p : (isSmallScreen ? 12 : 16),
+    border: isSmallScreen ? 'none' : '1px solid rgba(255,255,255,0.06)',
+  });
+
   return (
-    <section style={sectionStyle}>
+    <section style={{ ...sectionStyleFlat, padding: isSmallScreen ? 14 : 24 }}>
       <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Trip Turnaround Finder</h3>
       <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18, marginBottom: 18 }}>
-        <div style={fieldStyle}>
+      <div style={{ display: 'grid', gridTemplateColumns: isSmallScreen ? '1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 18 }}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
           <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }}
             style={{ ...controlStyle, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -178,41 +221,47 @@ export default function TripsTab({ list, airportNames }) {
             {list.map(c => <option key={c} value={c} style={{ color: '#0f172a', background: '#f8fafc' }}>{c}{airportNames[c] ? ' — ' + airportNames[c] : ''}</option>)}
           </select>
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Trip Start Date</label>
           <input type="date" value={tripStart} onChange={e => setTripStart(e.target.value)} style={controlStyle} />
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Trip End Date</label>
           <input type="date" value={tripEnd} onChange={e => setTripEnd(e.target.value)} style={controlStyle} />
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Start Weekdays</label>
-          {selectWeekdays(startWeekdays, setStartWeekdays)}
+          {renderChips('start', startWeekdays, setStartWeekdays)}
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>End Weekdays</label>
-          {selectWeekdays(endWeekdays, setEndWeekdays)}
+          {renderChips('end', endWeekdays, setEndWeekdays)}
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Departure to Destination</label>
           <input type="time" value={maxDepToDest} onChange={e => setMaxDepToDest(e.target.value)} style={controlStyle} />
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Return Departure</label>
           <input type="time" value={minRetDep} onChange={e => setMinRetDep(e.target.value)} style={controlStyle} />
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Min Trip Length (days)</label>
-          <input type="number" min={1} max={30} value={minTripDays} onChange={e => setMinTripDays(parseInt(e.target.value) || 1)} style={controlStyle} />
+          <input type="number" min={1} max={30} value={minTripDays === '' ? '' : minTripDays}
+            onChange={e => setMinTripDays(e.target.value === '' ? '' : parseInt(e.target.value, 10) || '')}
+            onBlur={e => { const v = parseInt(e.target.value, 10); if (isNaN(v) || v < 1) setMinTripDays(1); }}
+            style={controlStyle} />
         </div>
-        <div style={fieldStyle}>
+        <div style={fieldBoxStyle()}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Max Trip Length (days)</label>
-          <input type="number" min={1} max={30} value={maxTripDays} onChange={e => setMaxTripDays(parseInt(e.target.value) || 1)} style={controlStyle} />
+          <input type="number" min={1} max={30} value={maxTripDays === '' ? '' : maxTripDays}
+            onChange={e => setMaxTripDays(e.target.value === '' ? '' : parseInt(e.target.value, 10) || '')}
+            onBlur={e => { const v = parseInt(e.target.value, 10); if (isNaN(v) || v < 1) setMaxTripDays(1); }}
+            style={controlStyle} />
         </div>
       </div>
 
-      <div style={{ ...fieldStyle, marginBottom: 18 }}>
+      <div style={{ ...fieldBoxStyle(), marginBottom: 18 }}>
         <h4 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Saved Search Configs</h4>
         <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 12px' }}>
           Save the current weekdays, times and trip length under a name. Airport and date range are not saved; they stay as set when loading. Stored on the server, so every browser shows the same configs.
@@ -236,44 +285,72 @@ export default function TripsTab({ list, airportNames }) {
         )}
       </div>
 
+      {/* Fix #5/D18: Responsive cards (<640px) or table (≥640px) with Actions header */}
       {turnarounds.length > 0 && (
         <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
-          <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Possible Turnarounds</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Possible Turnarounds</h4>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>{turnarounds.length} result{turnarounds.length !== 1 ? 's' : ''}</span>
+          </div>
           {groupKeys.map(key => {
             const group = groups[key];
             const isOpen = !!expanded['trip_' + key];
             return (
               <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-                <button onClick={() => toggle('trip_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{(group[0]?.hinflug_ziel_name || airportNames[key] ? (group[0]?.hinflug_ziel_name || airportNames[key] || key) + ' ' : '') + '(' + key + ')'}</span>
-                  <span style={{ color: '#94a3b8', fontWeight: 500 }}>{isOpen ? '▲' : '▼'}</span>
+                <button onClick={() => toggle('trip_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ minWidth: 0 }}>{(group[0]?.hinflug_ziel_name || airportNames[key] ? (group[0]?.hinflug_ziel_name || airportNames[key] || key) + ' ' : '') + '(' + key + ')'}</span>
+                  <span style={{ color: '#94a3b8', fontWeight: 500, flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
                 </button>
                 {isOpen && (
                   <div style={{ padding: 8 }}>
-                    <button onClick={() => addAllFavorites(group)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#10b981', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 8, whiteSpace: 'nowrap' }}>Add all favorites</button>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound Flight</th>
-                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return Flight</th>
-                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Trip Duration</th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                    <button onClick={() => addAllFavorites(group)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#10b981', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 8, whiteSpace: 'nowrap', minWidth: 44, minHeight: 32 }}>Add all favorites</button>
+                    {isSmallScreen ? (
+                      // Cards view for mobile (<640px)
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {group.map((t, i) => (
-                          <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                            <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.hinflug_abflug_zeit) + ' | ' + (t.hinflug_flight_number || '-')}</td>
-                            <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.rueckflug_abflug_zeit) + ' | ' + (t.rueckflug_flight_number || '-')}</td>
-                            <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
-                            <td style={{ padding: '6px 8px' }}>
-                              <button onClick={() => addFavorite(t)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 110 }}>
-                                {t.is_favorite ? '★ Favorited' : '+ Add to favorites'}
-                              </button>
-                            </td>
-                          </tr>
+                          <div key={i} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600, marginBottom: 6 }}>
+                              <span style={{ color: '#38bdf8' }}>Out:</span> {formatTripDateTime(t.hinflug_abflug_zeit)} <span style={{ color: '#94a3b8' }}>({t.hinflug_flight_number || '-'})</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600, marginBottom: 6 }}>
+                              <span style={{ color: '#38bdf8' }}>Ret:</span> {formatTripDateTime(t.rueckflug_abflug_zeit)} <span style={{ color: '#94a3b8' }}>({t.rueckflug_flight_number || '-'})</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#38bdf8', fontWeight: 600, marginBottom: 8 }}>
+                              Dauer: {(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}
+                            </div>
+                            <button onClick={() => addFavorite(t)} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', width: '100%', minWidth: 44, minHeight: 44 }}>
+                              {t.is_favorite ? '★ Favorited' : '+ Add to favorites'}
+                            </button>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    ) : (
+                      // Table view for desktop (≥640px)
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound Flight</th>
+                            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return Flight</th>
+                            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Trip Duration</th>
+                            <th style={{ textAlign: 'right', padding: '6px 8px', color: '#94a3b8' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.map((t, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                              <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.hinflug_abflug_zeit) + ' | ' + (t.hinflug_flight_number || '-')}</td>
+                              <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{formatTripDateTime(t.rueckflug_abflug_zeit) + ' | ' + (t.rueckflug_flight_number || '-')}</td>
+                              <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
+                              <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                <button onClick={() => addFavorite(t)} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>
+                                  {t.is_favorite ? '★ Favorited' : '+ Add'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
               </div>
@@ -281,6 +358,7 @@ export default function TripsTab({ list, airportNames }) {
           })}
         </div>
       )}
+      <ConfirmDialog />
     </section>
   );
 }

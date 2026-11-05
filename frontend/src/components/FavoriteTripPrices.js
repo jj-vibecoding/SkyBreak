@@ -1,7 +1,13 @@
+// D6/D12: Responsive FavoriteTripPrices — useMediaQuery (Fix #19),
+//        touch targets ≥44px, card view <640px, dialog system.
 import React, { useState, useEffect } from 'react';
 import ChartModal from './ChartModal';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useConfirm } from './Dialogs';
 
 export default function FavoriteTripPrices() {
+  const isSmallScreen = useMediaQuery('(max-width: 639px)'); // Fix #19: responsive breakpoint
+  const { showConfirm, ConfirmDialog } = useConfirm(); // Fix #12: replace window.confirm
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -118,48 +124,69 @@ export default function FavoriteTripPrices() {
               </button>
               {isOpen && (
                 <div style={{ padding: 8 }}>
-                  <button onClick={async () => { if (!confirm('Delete all favorites in this group (matching filter)?')) return; for (const p of grp) { await fetch('/api/favorites/'+p.id, {method:'DELETE'}); } load(); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#ef4444', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer', marginBottom:8 }}>Delete all in group</button>
-                  <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
-                    <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'origin'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'origin'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Origin {grpSortKey['grp_' + key] === 'origin' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'outbound'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'outbound'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Outbound {grpSortKey['grp_' + key] === 'outbound' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'return'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'return'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Return {grpSortKey['grp_' + key] === 'return' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '20%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'cost'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'cost'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Cost {grpSortKey['grp_' + key] === 'cost' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'center', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Actions</th>
-                    </tr></thead>
-                    <tbody>
-                      {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=a[sk], bv=b[sk]; if (sk==='cost') { const aNull = a.price_total == null; const bNull = b.price_total == null; if (aNull && bNull) { av = bv = 0; } else if (aNull) { av = Infinity; bv = Number(b.price_total); } else if (bNull) { av = Number(a.price_total); bv = Infinity; } else { av = Number(a.price_total); bv = Number(b.price_total); } } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (sk !== 'cost') { if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); } if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
-                        <tr key={f.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>{f.start_airport || ''}</span></td>
-                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
-                            <div style={{ whiteSpace: 'nowrap' }}>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
-                            <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.outbound_flight || f.outbound_flight_number || '—'}</div>
-                          </td>
-                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
-                            <div style={{ whiteSpace: 'nowrap' }}>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
-                            <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.return_flight || f.return_flight_number || '—'}</div>
-                          </td>
-                          <td style={{ padding: '8px', color: '#38bdf8', fontWeight: 700, fontSize: 11, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                            <div>Total: {f.price_total != null ? f.price_total + ' €' : 'none / unavailable'}</div>
-                            <div style={{ fontSize: 9, color: '#cbd5e1' }}>{f.price_outbound != null ? 'Outbound: ' + f.price_outbound + ' €' : 'Outbound: —'} | {f.price_return != null ? 'Return: ' + f.price_return + ' €' : 'Return: —'}</div>
-                            <div style={{ fontSize: 9, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleDateString() : '—'})</div>
-                          </td>
-                          <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                              <button onClick={() => openChartFor(f.id)} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Chart</button>
-                              <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Delete</button>
+                  <button onClick={async () => { const ok = await showConfirm('Delete All', 'Delete all favorites in this group (matching filter)?'); if (!ok) return; for (const p of grp) { await fetch('/api/favorites/'+p.id, {method:'DELETE'}); } load(); }} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginBottom: 8, minWidth: 44, minHeight: 44 }}>Delete all in group</button>
+                  {isSmallScreen ? (
+                      // Mobile card view (<640px)
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=a[sk], bv=b[sk]; if (sk==='cost') { const aNull = a.price_total == null; const bNull = b.price_total == null; if (aNull && bNull) { av = bv = 0; } else if (aNull) { av = Infinity; bv = Number(b.price_total); } else if (bNull) { av = Number(a.price_total); bv = Infinity; } else { av = Number(a.price_total); bv = Number(b.price_total); } } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (sk !== 'cost') { if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); } if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
+                          <div key={f.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', marginBottom: 4 }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 11 }}>({f.start_airport || ''})</span></div>
+                            <div style={{ fontSize: 13, color: '#f8fafc', marginBottom: 4 }}>Out: {f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)} <span style={{ color: '#94a3b8' }}>({f.outbound_flight || f.outbound_flight_number || '-'})</span></div>
+                            <div style={{ fontSize: 13, color: '#f8fafc', marginBottom: 4 }}>Ret: {f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)} <span style={{ color: '#94a3b8' }}>({f.return_flight || f.return_flight_number || '-'})</span></div>
+                            <div style={{ fontSize: 14, color: '#38bdf8', fontWeight: 700, marginBottom: 8 }}>Total: {f.price_total != null ? f.price_total + ' €' : 'none / unavailable'}</div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button onClick={() => openChartFor(f.id)} style={{ flex: 1, padding: '8px 14px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 12, fontWeight: 700, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>Chart</button>
+                              <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ flex: 1, padding: '8px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>Delete</button>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>Updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleDateString() : '—'} | Out: {f.price_outbound != null ? f.price_outbound + ' €' : '—'} | Ret: {f.price_return != null ? f.price_return + ' €' : '—'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      // Desktop table view (≥640px)
+                      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
+                        <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'origin'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'origin'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Origin {grpSortKey['grp_' + key] === 'origin' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'outbound'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'outbound'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Outbound {grpSortKey['grp_' + key] === 'outbound' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'return'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'return'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Return {grpSortKey['grp_' + key] === 'return' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '20%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'cost'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'cost'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Cost {grpSortKey['grp_' + key] === 'cost' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                          <th style={{ textAlign: 'center', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Actions</th>
+                        </tr></thead>
+                        <tbody>
+                          {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=a[sk], bv=b[sk]; if (sk==='cost') { const aNull = a.price_total == null; const bNull = b.price_total == null; if (aNull && bNull) { av = bv = 0; } else if (aNull) { av = Infinity; bv = Number(b.price_total); } else if (bNull) { av = Number(a.price_total); bv = Infinity; } else { av = Number(a.price_total); bv = Number(b.price_total); } } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (sk !== 'cost') { if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); } if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
+                            <tr key={f.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                              <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>{f.start_airport || ''}</span></td>
+                              <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
+                                <div style={{ whiteSpace: 'nowrap' }}>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
+                                <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.outbound_flight || f.outbound_flight_number || '—'}</div>
+                              </td>
+                              <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
+                                <div style={{ whiteSpace: 'nowrap' }}>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
+                                <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.return_flight || f.return_flight_number || '—'}</div>
+                              </td>
+                              <td style={{ padding: '8px', color: '#38bdf8', fontWeight: 700, fontSize: 11, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                                <div>Total: {f.price_total != null ? f.price_total + ' €' : 'none / unavailable'}</div>
+                                <div style={{ fontSize: 9, color: '#cbd5e1' }}>{f.price_outbound != null ? 'Outbound: ' + f.price_outbound + ' €' : 'Outbound: —'} | {f.price_return != null ? 'Return: ' + f.price_return + ' €' : 'Return: —'}</div>
+                                <div style={{ fontSize: 9, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleDateString() : '—'})</div>
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                                  <button onClick={() => openChartFor(f.id)} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 12, fontWeight: 700, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>Chart</button>
+                                  <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', minWidth: 44, minHeight: 44 }}>Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                 </div>
               )}
             </div>
           );
         })}
       <ChartModal open={chartOpen} onClose={() => setChartOpen(false)} data={chartData} />
+      <ConfirmDialog />
     </div>
   );
 }

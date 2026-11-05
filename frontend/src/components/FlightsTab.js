@@ -1,19 +1,17 @@
+// D4/D7: Responsive FlightsTab — flex-wrap for status line (Fix #17), 
+//        scroll-x for tables, touch targets ≥44px (Fix #6).
 import React, { useState, useEffect } from 'react';
 import { formatTime } from '../utils/format';
-
-const sectionStyle = {
-  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-};
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 const thStyle = { textAlign: 'left', padding: '4px 8px', color: '#94a3b8' };
 const tdStyle = { padding: '4px 8px' };
 
 function FlightTable({ title, rows, empty, firstCol, firstLabel }) {
   return (
-    <div>
+    <div className="table-responsive">
       <strong style={{ color: title.includes('Arrival') ? '#4ade80' : '#38bdf8', fontSize: 13 }}>{title}</strong>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
             <th style={thStyle}>{firstLabel}</th>
@@ -42,6 +40,8 @@ function FlightTable({ title, rows, empty, firstCol, firstLabel }) {
 
 // Flight schedule for a saved airport, per date. Owns its own date/flight data.
 export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
+  const isSmallScreen = useMediaQuery('(max-width: 767px)'); // mobile/tablet
+  
   const [flightDate, setFlightDate] = useState(new Date().toISOString().split('T')[0]);
   const [flights, setFlights] = useState([]);
   const [futureInfo, setFutureInfo] = useState({});
@@ -58,23 +58,15 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
       .catch(() => setFlights([]));
   }, [flightDate]);
 
-  const shiftDay = (delta) => {
-    setFlightDate(new Date(new Date(flightDate).getTime() + delta * 86400000).toISOString().split('T')[0]);
-  };
-  const today = () => setFlightDate(new Date().toISOString().split('T')[0]);
-
   return (
-    <section style={sectionStyle}>
-      <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
+    <>
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="date" value={flightDate} onChange={e => setFlightDate(e.target.value)}
-          style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
-        <button onClick={() => shiftDay(-1)} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Previous Day</button>
-        <button onClick={today} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Today</button>
-        <button onClick={() => shiftDay(1)} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Next Day ▶</button>
-        <button disabled={fetchRunning} onClick={onFetchNow}
-          style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: fetchRunning ? '#475569' : '#10b981', color: '#fff', fontWeight: 700, cursor: fetchRunning ? 'not-allowed' : 'pointer', fontSize: 13 }}>
-          {fetchRunning ? 'Fetching...' : 'Fetch Now'}
+          className="tap"
+          style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, cursor: 'pointer' }} />
+        <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} className="tap"
+          style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+          Today
         </button>
       </div>
 
@@ -83,11 +75,40 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
         const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
         return (
           <div key={airport} style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <button onClick={() => toggle(airport)} style={{ flex: 1, textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              width: '100%',
+              flexWrap: isSmallScreen ? 'wrap' : 'nowrap',
+              gap: 8,
+            }}>
+              <button onClick={() => toggle(airport)} style={{ 
+                flex: 1, 
+                textAlign: 'left', 
+                padding: '12px 16px', 
+                borderRadius: 10, 
+                border: '1px solid rgba(255,255,255,0.08)', 
+                background: 'rgba(255,255,255,0.06)', 
+                color: '#f8fafc', 
+                fontWeight: 700, 
+                fontSize: 16, 
+                cursor: 'pointer', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                minWidth: 44,
+                minHeight: 44,
+              }}>
                 {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
               </button>
-              <span style={{ marginLeft: 10, fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>
+              <span style={{ 
+                marginLeft: 10, 
+                fontSize: 12, 
+                color: '#38bdf8', 
+                fontWeight: 600,
+                whiteSpace: isSmallScreen ? 'normal' : 'nowrap',
+              }}>
                 {futureInfo[airport] ? (futureInfo[airport].max_departure_day ? `Loaded until ${futureInfo[airport].max_departure_day}` : 'No future data') : '...'}
               </span>
             </div>
@@ -113,6 +134,6 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
         );
       })}
       {!list.length && <div style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</div>}
-    </section>
+    </>
   );
 }
