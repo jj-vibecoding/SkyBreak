@@ -6,6 +6,7 @@ import { formatTripDateTime } from '../utils/format';
 import { useTripConfigs } from '../hooks/useTripConfigs';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useConfirm } from './Dialogs';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 const sectionStyle = {
   background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
@@ -64,16 +65,19 @@ function payloadFromTurnaround(t, startAirport) {
 export default function TripsTab({ list, airportNames }) {
   const isSmallScreen = useMediaQuery('(max-width: 639px)'); // Fix #5: cards below 640px
   const { showConfirm, ConfirmDialog } = useConfirm(); // Fix #12: replace window.confirm
-  const [startAirport, setStartAirport] = useState('');
-  const [endAirport, setEndAirport] = useState('');
-  const [tripStart, setTripStart] = useState(new Date().toISOString().split('T')[0]);
-  const [tripEnd, setTripEnd] = useState(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
-  const [startWeekdays, setStartWeekdays] = useState([4]);
-  const [endWeekdays, setEndWeekdays] = useState([6]);
-  const [maxDepToDest, setMaxDepToDest] = useState('18:00');
-  const [minRetDep, setMinRetDep] = useState('10:00');
-  const [maxTripDays, setMaxTripDays] = useState(5);
-  const [minTripDays, setMinTripDays] = useState(1);
+  
+  // Persist UI state in localStorage
+  const [startAirport, setStartAirport] = useLocalStorage('trips.startAirport', '');
+  const [endAirport, setEndAirport] = useLocalStorage('trips.endAirport', '');
+  const [tripStart, setTripStart] = useLocalStorage('trips.tripStart', new Date().toISOString().split('T')[0]);
+  const [tripEnd, setTripEnd] = useLocalStorage('trips.tripEnd', new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
+  const [startWeekdays, setStartWeekdays] = useLocalStorage('trips.startWeekdays', [4]);
+  const [endWeekdays, setEndWeekdays] = useLocalStorage('trips.endWeekdays', [6]);
+  const [maxDepToDest, setMaxDepToDest] = useLocalStorage('trips.maxDepToDest', '18:00');
+  const [minRetDep, setMinRetDep] = useLocalStorage('trips.minRetDep', '10:00');
+  const [maxTripDays, setMaxTripDays] = useLocalStorage('trips.maxTripDays', 5);
+  const [minTripDays, setMinTripDays] = useLocalStorage('trips.minTripDays', 1);
+  
   const [turnarounds, setTurnarounds] = useState([]);
   const [expanded, setExpanded] = useState({});
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
