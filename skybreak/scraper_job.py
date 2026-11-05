@@ -224,6 +224,12 @@ def scrape_favorite_prices():
                 else:
                     logger.debug("Preis-Update Favorit %s erfolgreich: %s", fav_id, result.get("price_total"))
                     success_count += 1
+                    # Evaluate alert after successful fetch (must not break the loop)
+                    try:
+                        from skybreak.notifications import evaluate_alert
+                        evaluate_alert(fav_id)
+                    except Exception:
+                        pass  # alert failure must never break price loop
             except Exception as e:
                 logger.warning("Preis-Update Favorit %s fehlgeschlagen: %s", fav_id, e)
                 fail_count += 1

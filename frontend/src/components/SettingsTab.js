@@ -16,6 +16,9 @@ export default function SettingsTab() {
     price_fetch_interval_hours: '6', refresh_interval_days: '7',
     google_consent_cookie: SOCS_DEFAULT,
   });
+  const [telegramToken, setTelegramToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [testSending, setTestSending] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -27,8 +30,26 @@ export default function SettingsTab() {
         refresh_interval_days: data.refresh_interval_days || '7',
         google_consent_cookie: data.google_consent_cookie || SOCS_DEFAULT,
       });
+      setTelegramToken(data.telegram_bot_token || '');
+      setTelegramChatId(data.telegram_chat_id || '');
     }).catch(() => {});
   }, []);
+
+  const testNotification = async () => {
+    setTestSending(true);
+    try {
+      const res = await fetch('/api/notifications/test', { method: 'POST' });
+      const data = await res.json();
+      if (data.sent) {
+        showToast('Test notification sent successfully!', 'success');
+      } else {
+        showToast(`Failed: ${data.detail || 'Unknown error'}`, 'error');
+      }
+    } catch (e) {
+      showToast(`Failed: ${e.message}`, 'error');
+    }
+    setTestSending(false);
+  };
 
   const showToast = (message, type) => {
     window.dispatchEvent(new CustomEvent('showToast', { 
@@ -45,6 +66,8 @@ export default function SettingsTab() {
       price_fetch_interval_hours: settings.price_fetch_interval_hours,
       refresh_interval_days: settings.refresh_interval_days,
       google_consent_cookie: settings.google_consent_cookie,
+      telegram_bot_token: telegramToken || undefined,
+      telegram_chat_id: telegramChatId || undefined,
     };
     const res = await fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -57,6 +80,15 @@ export default function SettingsTab() {
       showToast('Failed to save settings', 'error');
     }
     setSaving(false);
+  };
+
+  const handleSaveTelegram = async () => {
+    const res = await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegram_bot_token: telegramToken || undefined, telegram_chat_id: telegramChatId || undefined }),
+    });
+    if (res.ok) showToast('Telegram settings saved', 'success');
+    else showToast('Failed to save Telegram settings', 'error');
   };
 
   return (
@@ -106,6 +138,35 @@ export default function SettingsTab() {
           color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: saving ? 'not-allowed' : 'pointer',
           alignSelf: 'flex-start', opacity: saving ? 0.6 : 1
         }}>{saving ? 'Saving…' : 'Save'}</button>
+
+        {/* Notifications Card */}
+        <div style={{ marginTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>📩 Notifications (Telegram)</h4>
+          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 12 }}>Configure Telegram bot credentials to receive price alerts when monitored trips hit your target prices.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <label htmlFor="telegramBotToken" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Bot Token</label>
+              <input id="telegramBotToken" type="password" value={telegramToken}
+                onChange={e => setTelegramToken(e.target.value)} placeholder="123456:ABC-DEF..."
+                style={{ ...inputStyle, maxWidth: 420, fontSize: 14 }} />
+            </div>
+            <div>
+              <label htmlFor="telegramChatId" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Chat ID</label>
+              <input id="telegramChatId" type="text" value={telegramChatId}
+                onChange={e => setTelegramChatId(e.target.value)} placeholder="-1001234567890"
+                style={{ ...inputStyle, maxWidth: 220, fontSize: 14 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
+              <button onClick={handleSaveTelegram} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                Save Telegram Settings
+              </button>
+              <button onClick={testNotification} disabled={testSending || !telegramToken || !telegramChatId}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: testSending ? '#475569' : '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: 13, cursor: testSending || !telegramToken || !telegramChatId ? 'not-allowed' : 'pointer', opacity: testSending || !telegramToken || !telegramChatId ? 0.6 : 1 }}>
+                {testSending ? 'Sending...' : 'Send Test Message'}
+              </button>
+            </div>
+          </div>
+        </div>
       </form>
     </>
   );

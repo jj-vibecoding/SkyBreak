@@ -23,6 +23,8 @@ SETTINGS_WHITELIST = (
     "google_consent_cookie",
     "price_fetch_interval_hours",
     "refresh_interval_days",
+    "telegram_bot_token",
+    "telegram_chat_id",
 )
 
 GOOGLE_CONSENT_COOKIE = "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"
@@ -339,10 +341,49 @@ def migration_v15(conn):
     _bump(conn, 15)
 
 
+def migration_v16(conn):
+    """Price alerts with Telegram notifications.
+
+    Adds target_price to favorite_trips (per-trip), a destination_targets table
+    (per-destination-group), and a notifications log table.
+    """
+    cols = _favorite_cols(conn)
+    if "target_price" not in cols:
+        conn.execute("ALTER TABLE favorite_trips ADD COLUMN target_price REAL")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS destination_targets (
+            destination_airport TEXT PRIMARY KEY,
+            target_price REAL NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            favorite_id INTEGER NOT NULL,
+            channel TEXT NOT NULL DEFAULT 'telegram',
+            message TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('sent','failed')),
+            target_scope TEXT CHECK(target_scope IN ('trip','destination')),
+            detail TEXT,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_notifications_fav ON notifications (favorite_id, sent_at DESC)"
+    )
+    _bump(conn, 16)
+
+
 MIGRATIONS = [
     migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
     migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
     migration_v11, migration_v12, migration_v13, migration_v14, migration_v15,
+    migration_v16,
 ]
 
 

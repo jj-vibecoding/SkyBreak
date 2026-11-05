@@ -37,7 +37,7 @@ def _version(db):
 def test_fresh_db_reaches_latest(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
-    assert _version(db) == 15
+    assert _version(db) == 16
 
 
 def test_v11_drops_stale_columns(tmp_path):
@@ -84,7 +84,7 @@ def test_partial_v11_db_upgraded_to_latest(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 15
+    assert _version(db) == 16
     cols = _cols(db, "flights")
     for c in ("flight_date", "arrival_date", "departure", "arrival", "month_key"):
         assert c in cols, f"{c} should be added by v12"
@@ -102,7 +102,7 @@ def test_v13_db_upgraded_to_v14(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 15
+    assert _version(db) == 16
     cols = _cols(db, "trip_search_configs")
     assert {"id", "name", "start_weekdays", "max_trip_days"} <= cols
     conn = sqlite3.connect(db)
@@ -121,7 +121,7 @@ def test_v14_creates_trip_price_quotes_table(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 15
+    assert _version(db) == 16
     # Verify the new table exists with expected columns
     cols = _cols(db, "trip_price_quotes")
     for c in ("start_airport", "destination_airport", "outbound_date",
@@ -138,7 +138,7 @@ def test_migration_is_idempotent(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
     m.apply_migrations(db)  # must not raise on a second run
-    assert _version(db) == 15
+    assert _version(db) == 16
 
 
 def test_migrate_runs_as_script(tmp_path):
@@ -153,7 +153,7 @@ def test_migrate_runs_as_script(tmp_path):
         cwd=str(pathlib.Path.cwd()),
     )
     assert res.returncode == 0, f"stderr: {res.stderr}"
-    assert _version(db) == 15
+    assert _version(db) == 16
 
 
 def test_v15_creates_run_log_tables(tmp_path):
@@ -167,7 +167,7 @@ def test_v15_creates_run_log_tables(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 15
+    assert _version(db) == 16
     # Verify both new tables exist with expected columns
     scrape_cols = _cols(db, "scrape_runs")
     for c in ("started_at", "finished_at", "status", "airports", "flights_saved"):

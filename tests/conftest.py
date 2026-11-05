@@ -38,7 +38,8 @@ def _reset_data_tables():
     conn = sqlite3.connect(str(_DB_FILE), timeout=30.0)
     for table in ("flights", "airports", "favorite_trips", "favorite_trip_prices",
                   "trip_search_configs", "trip_price_quotes",
-                  "scrape_runs", "price_runs", "settings"):
+                  "scrape_runs", "price_runs", "settings",
+                  "destination_targets", "notifications"):
         try:
             conn.execute(f"DELETE FROM {table}")
         except sqlite3.OperationalError:

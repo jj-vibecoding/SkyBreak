@@ -326,8 +326,17 @@ def create_favorite():
 @app.route("/api/favorites", methods=["GET"])
 def list_favorites():
     conn = connect_db()
-    rows = conn.execute("SELECT id, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at, outbound_trip_date, return_trip_date FROM favorite_trips ORDER BY created_at DESC").fetchall()
-    conn.close()
+    # Pre-load all destination targets in one query (before iterating favorites)
+    dest_targets = {}
+    for r in conn.execute("SELECT destination_airport, target_price FROM destination_targets").fetchall():
+        dest_targets[r[0]] = r[1]
+
+    rows = conn.execute(
+        "SELECT id, destination_airport, outbound_flight_number, return_flight_number, "
+        "start_airport, created_at, outbound_trip_date, return_trip_date, target_price "
+        "FROM favorite_trips ORDER BY created_at DESC"
+    ).fetchall()
+
     from skybreak.flight_prices import get_prices_for_favorite
     result = []
     for r in rows:
@@ -340,6 +349,7 @@ def list_favorites():
         created_at = r[5]
         out_trip_date = r[6] or ''
         ret_trip_date = r[7] or ''
+        trip_target = r[8]  # may be None
         out_dep = out_arr = ret_dep = ret_arr = out_flight = ret_flight = None
         conn2 = connect_db()
         try:
@@ -421,9 +431,13 @@ def list_favorites():
                 pass
         start_name = _cached_fetch_airport_name(start_airport) or start_airport or ""
         dest_name = _cached_fetch_airport_name(dest_airport) or dest_airport or ""
+        # Destination-level target for this trip's destination airport
+        dest_target = dest_targets.get(dest_airport)
         result.append({"id": r[0], "destination_airport": r[1], "outbound_flight_number": r[2],
                        "return_flight_number": r[3], "start_airport": r[4], "created_at": r[5],
                                                 "outbound_trip_date": r[6], "return_trip_date": r[7],
+                       "target_price": trip_target,
+                       "destination_target_price": dest_target,
                        "price_outbound": prices.get("price_outbound"), "price_return": prices.get("price_return"),
                        "price_total": prices.get("price_total"), "currency": prices.get("currency"), "fetched_at": prices.get("fetched_at"),
                        "outbound_departure": out_dep, "outbound_arrival": out_arr, "outbound_flight": out_flight,
@@ -432,6 +446,47 @@ def list_favorites():
                        "start_city_country": start_city_country, "dest_city_country": dest_city_country,
                        "duration_outbound_minutes": duration_out, "duration_return_minutes": duration_ret})
     return jsonify(result)
+
+@app.route("/api/favorites/<int:fav_id>", methods=["PUT"])
+def update_favorite_target(fav_id):
+    """Set or clear the trip-level target price."""
+    data = request.get_json() or {}
+    tp = data.get("target_price")
+    if tp is not None:
+        try:
+            tp = float(tp)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid target_price"}), 400
+        if tp < 0:
+            return jsonify({"error": "target_price must be non-negative"}), 400
+    conn = connect_db()
+    try:
+        exists = conn.execute(
+            "SELECT id FROM favorite_trips WHERE id = ?", (fav_id,)
+        ).fetchone()
+        if not exists:
+            conn.close()
+            return jsonify({"error": "Favorite not found"}), 404
+        conn.execute(
+            "UPDATE favorite_trips SET target_price = ? WHERE id = ?",
+            (tp, fav_id),
+        )
+        conn.commit()
+        # Read back the updated row
+        row = conn.execute(
+            "SELECT id, destination_airport, outbound_flight_number, return_flight_number, "
+            "start_airport, created_at, outbound_trip_date, return_trip_date, target_price "
+            "FROM favorite_trips WHERE id = ?",
+            (fav_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    return jsonify({
+        "id": row[0],
+        "target_price": row[8],
+        "destination_airport": row[1],
+    })
+
 
 @app.route("/api/favorites/<int:fav_id>", methods=["DELETE"])
 def delete_favorite(fav_id):
@@ -447,6 +502,75 @@ def favorite_prices(fav_id):
     from skybreak.flight_prices import fetch_prices_favorite
     result = fetch_prices_favorite(fav_id)
     return jsonify({"updated": True, "result": result})
+
+
+# ── Destination Targets ──────────────────────────────────────────────────────
+
+
+@app.route("/api/destination-targets/<airport>", methods=["PUT"])
+def upsert_destination_target(airport):
+    """Set or clear a destination-level target price."""
+    airport = airport.strip().upper()
+    if not validate_iata(airport):
+        return jsonify({"error": "Invalid IATA code"}), 400
+    data = request.get_json() or {}
+    tp = data.get("target_price")
+    if tp is None:
+        # null → delete the row (clear target)
+        conn = connect_db()
+        try:
+            conn.execute("DELETE FROM destination_targets WHERE destination_airport = ?", (airport,))
+            conn.commit()
+        finally:
+            conn.close()
+        return jsonify({"deleted": airport})
+    try:
+        tp = float(tp)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid target_price"}), 400
+    if tp < 0:
+        return jsonify({"error": "target_price must be non-negative"}), 400
+    conn = connect_db()
+    conn.execute(
+        "INSERT OR REPLACE INTO destination_targets (destination_airport, target_price) VALUES (?, ?)",
+        (airport, tp),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"destination_airport": airport, "target_price": tp})
+
+
+# ── Notifications ────────────────────────────────────────────────────────────
+
+
+@app.route("/api/notifications", methods=["GET"])
+def get_notifications():
+    """Return recent notification log entries."""
+    limit = request.args.get("limit", 50)
+    try:
+        limit = min(int(limit), 200)
+    except (TypeError, ValueError):
+        limit = 50
+    from skybreak.notifications import last_notifications as _last
+    return jsonify(_last(limit))
+
+
+@app.route("/api/notifications/test", methods=["POST"])
+def test_notification():
+    """Send a test Telegram message with configured credentials."""
+    token = get_setting("telegram_bot_token") or ""
+    chat_id = get_setting("telegram_chat_id") or ""
+    if not token or not chat_id:
+        return jsonify({"sent": False, "detail": "Telegram credentials not configured"})
+    try:
+        from skybreak.notifications import send_telegram as _send
+        ok, detail = _send(token, chat_id, "*SkyBreak* — Telegram notification test \u2705")
+        if ok:
+            return jsonify({"sent": True})
+        return jsonify({"sent": False, "detail": detail})
+    except Exception as exc:
+        return jsonify({"sent": False, "detail": str(exc)})
+
 
 @app.route("/api/prices", methods=["POST"])
 def update_prices():
@@ -788,6 +912,8 @@ _USER_TABLES = [
     "airports",
     "favorite_trips",
     "trip_search_configs",
+    "destination_targets",
+    "notifications",
     "settings",
 ]
 
