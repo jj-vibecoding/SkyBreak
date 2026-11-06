@@ -30,6 +30,9 @@ export default function FavoriteTripPrices() {
   
   // Price alert state — destination targets (keyed by airport code)
   const [destTargets, setDestTargets] = useState({});
+  // Draft values typed but not yet persisted (keyed by airport code / favorite id)
+  const [destDrafts, setDestDrafts] = useState({});
+  const [tripDrafts, setTripDrafts] = useState({});
   // Notification log
   const [notifications, setNotifications] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -54,24 +57,25 @@ export default function FavoriteTripPrices() {
     }).catch(() => {}).finally(() => setNotifLoading(false));
   };
 
-  // Save destination target
+  // Save destination target (persisted on blur, not on every keystroke)
   const saveDestTarget = async (airport, value) => {
     const tp = value === '' ? null : parseFloat(value);
     await fetch(`/api/destination-targets/${airport}`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ target_price: tp }),
     });
-    // Refresh to get updated values
+    setDestDrafts(d => { const n = {...d}; delete n[airport]; return n; });
     load();
   };
 
-  // Save trip-level target
+  // Save trip-level target (persisted on blur, not on every keystroke)
   const saveTripTarget = async (favId, value) => {
     const tp = value === '' ? null : parseFloat(value);
     await fetch(`/api/favorites/${favId}`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ target_price: tp }),
     });
+    setTripDrafts(t => { const n = {...t}; delete n[favId]; return n; });
     load();
   };
 
@@ -220,11 +224,12 @@ export default function FavoriteTripPrices() {
             <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
               <button onClick={() => toggle('price_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <span>{(grp[0]?.dest_city_country || key) + ' (' + key + ')'}</span>
-                {/* Destination target input in header */}
+                {/* Destination target input in header - onChange=local draft, onBlur=DB persist */}
                 <input
                   type="number" min="0" step="1" placeholder="Target €"
-                  value={destTp !== undefined ? destTp : ''}
-                  onChange={e => saveDestTarget(key, e.target.value)}
+                  value={destDrafts[key] !== undefined ? destDrafts[key] : (destTp !== undefined ? destTp : '')}
+                  onChange={e => setDestDrafts(d => ({...d, [key]: e.target.value}))}
+                  onBlur={() => saveDestTarget(key, destDrafts[key])}
                   style={{ width: 90, padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)', color: '#f8fafc', fontSize: 11, textAlign: 'right' }}
                   title="Set destination-level target price for all trips to this airport"
                 />
@@ -244,11 +249,12 @@ export default function FavoriteTripPrices() {
                             <div style={{ fontSize: 13, color: '#f8fafc', marginBottom: 4 }}>Ret: {f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)} <span style={{ color: '#94a3b8' }}>({f.return_flight || f.return_flight_number || '-'})</span></div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                               <div style={{ fontSize: 14, color: '#38bdf8', fontWeight: 700 }}>Total: {f.price_total != null ? f.price_total + ' €' : 'none / unavailable'}</div>
-                              {/* Trip-level target input */}
+                              {/* Trip-level target input - onChange=local draft, onBlur=DB persist */}
                               <input
                                 type="number" min="0" step="1" placeholder="Target €"
-                                value={f.target_price !== undefined && f.target_price !== null ? f.target_price : ''}
-                                onChange={e => saveTripTarget(f.id, e.target.value)}
+                                value={tripDrafts[f.id] !== undefined ? tripDrafts[f.id] : (f.target_price !== undefined && f.target_price !== null ? f.target_price : '')}
+                                onChange={e => setTripDrafts(t => ({...t, [f.id]: e.target.value}))}
+                                onBlur={() => saveTripTarget(f.id, tripDrafts[f.id])}
                                 style={{ width: 90, padding: '4px 8px', borderRadius: 6, border: f.target_price != null ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.15)', background: f.target_price != null ? 'rgba(56,189,248,0.1)' : 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 11, textAlign: 'right' }}
                                 title={f.target_price != null ? 'Trip-level target (overrides destination)' : 'Set trip-level target price'}
                               />
@@ -286,10 +292,12 @@ export default function FavoriteTripPrices() {
                                 <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.return_flight || f.return_flight_number || '—'}</div>
                               </td>
                               <td style={{ padding: '8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                {/* Trip-level target input - onChange=local draft, onBlur=DB persist */}
                                 <input
                                   type="number" min="0" step="1" placeholder="Target €"
-                                  value={f.target_price !== undefined && f.target_price !== null ? f.target_price : ''}
-                                  onChange={e => saveTripTarget(f.id, e.target.value)}
+                                  value={tripDrafts[f.id] !== undefined ? tripDrafts[f.id] : (f.target_price !== undefined && f.target_price !== null ? f.target_price : '')}
+                                  onChange={e => setTripDrafts(t => ({...t, [f.id]: e.target.value}))}
+                                  onBlur={() => saveTripTarget(f.id, tripDrafts[f.id])}
                                   style={{ width: 80, padding: '4px 6px', borderRadius: 6, border: f.target_price != null ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.15)', background: f.target_price != null ? 'rgba(56,189,248,0.1)' : 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 11, textAlign: 'right' }}
                                   title={f.target_price != null ? 'Trip-level target (overrides destination)' : 'Set trip-level target price'}
                                 />
