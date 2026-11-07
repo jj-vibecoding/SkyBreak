@@ -51,7 +51,14 @@ def _cached_fetch_airport_name(code):
 
 def _cached_fetch_city_country(code):
     if code not in _city_lookup_cache:
-        _city_lookup_cache[code] = fetch_city_country(code)
+        # Derive from the name cache (populated from DB + external fallback)
+        full = _cached_fetch_airport_name(code)
+        start = full.rfind('(')
+        end = full.rfind(')')
+        if start != -1 and end != -1 and end > start:
+            _city_lookup_cache[code] = full[start+1:end]
+        else:
+            _city_lookup_cache[code] = code or ""
     return _city_lookup_cache[code]
 
 def _tz_for(code, airports):
@@ -337,11 +344,65 @@ def list_favorites():
         "FROM favorite_trips ORDER BY created_at DESC"
     ).fetchall()
 
-    from skybreak.flight_prices import get_prices_for_favorite
+    # --- Batch fetch latest prices for ALL favorites in one query ----------
+    fav_ids = [r[0] for r in rows]
+    price_map: dict[int, dict] = {}
+    if fav_ids:
+        placeholders = ",".join("?" for _ in fav_ids)
+        for row in conn.execute(
+            f"SELECT favorite_id, price_outbound, price_return, price_total, currency, fetched_at "
+            f"FROM favorite_trip_prices "
+            f"WHERE favorite_id IN ({placeholders}) "
+            f"AND fetched_at = (SELECT MAX(fetched_at) FROM favorite_trip_prices WHERE favorite_id = favorite_trip_prices.favorite_id)",
+            fav_ids,
+        ).fetchall():
+            price_map[row[0]] = {
+                "price_outbound": row[1], "price_return": row[2],
+                "price_total": row[3], "currency": row[4], "fetched_at": row[5],
+            }
+
+    # --- Batch fetch flight details for ALL outbound/return flights ---------
+    out_keys: list[tuple[str, str]] = []   # (flight_number, date)
+    ret_keys: list[tuple[str, str]] = []
+    for r in rows:
+        if r[6] and r[4] and r[1] and r[2]:  # out_trip_date, start_airport, dest_airport, out_fnum
+            out_keys.append((r[2], r[6]))
+        if r[7] and r[4] and r[1] and r[3]:  # ret_trip_date, start_airport, dest_airport, ret_fnum
+            ret_keys.append((r[3], r[7]))
+
+    flight_map: dict[tuple[str, str], tuple] = {}
+    if out_keys:
+        where_clause = " OR ".join(
+            f"(flight_number = ? AND date(departure_time) = ?)" for _ in out_keys
+        )
+        params = [item for pair in out_keys for item in pair]
+        for row in conn.execute(
+            f"SELECT flight_number, date(departure_time), airport_icao, destination_icao, flight_number, departure_time, arrival_time "
+            f"FROM flights WHERE {where_clause}",
+            params,
+        ).fetchall():
+            key = (row[0], row[1])  # (flight_number, date)
+            if key not in flight_map:
+                flight_map[key] = (row[2], row[3], row[4], row[5], row[6])
+
+    ret_flight_map: dict[tuple[str, str], tuple] = {}
+    if ret_keys:
+        where_clause = " OR ".join(
+            f"(flight_number = ? AND date(departure_time) = ?)" for _ in ret_keys
+        )
+        params = [item for pair in ret_keys for item in pair]
+        for row in conn.execute(
+            f"SELECT flight_number, date(departure_time), airport_icao, destination_icao, flight_number, departure_time, arrival_time "
+            f"FROM flights WHERE {where_clause}",
+            params,
+        ).fetchall():
+            key = (row[0], row[1])  # (flight_number, date)
+            if key not in ret_flight_map:
+                ret_flight_map[key] = (row[2], row[3], row[4], row[5], row[6])
+
     result = []
     for r in rows:
-        prices = get_prices_for_favorite(r[0]) or {}
-        # Flugdaten für Hinflug und Rückflug suchen
+        prices = price_map.get(r[0]) or {}
         dest_airport = r[1] or ''
         out_fnum = r[2] or ''
         ret_fnum = r[3] or ''
@@ -350,25 +411,20 @@ def list_favorites():
         out_trip_date = r[6] or ''
         ret_trip_date = r[7] or ''
         trip_target = r[8]  # may be None
-        out_dep = out_arr = ret_dep = ret_arr = out_flight = ret_flight = None
-        conn2 = connect_db()
-        try:
-            if out_trip_date and start_airport and dest_airport and out_fnum:
-                row_out = conn2.execute(
-                    "SELECT airport_icao, destination_icao, flight_number, departure_time, arrival_time FROM flights WHERE flight_number = ? AND date(departure_time) = ? LIMIT 1",
-                    (out_fnum, out_trip_date)
-                ).fetchone()
-                if row_out:
-                    out_dep = row_out[3]; out_arr = row_out[4]; out_flight = row_out[2]
-            if ret_trip_date and start_airport and dest_airport and ret_fnum:
-                row_ret = conn2.execute(
-                    "SELECT airport_icao, destination_icao, flight_number, departure_time, arrival_time FROM flights WHERE flight_number = ? AND date(departure_time) = ? LIMIT 1",
-                    (ret_fnum, ret_trip_date)
-                ).fetchone()
-                if row_ret:
-                    ret_dep = row_ret[3]; ret_arr = row_ret[4]; ret_flight = row_ret[2]
-        finally:
-            conn2.close()
+
+        # Look up pre-fetched flight details
+        out_dep = out_arr = out_flight = None
+        if out_trip_date and start_airport and dest_airport and out_fnum:
+            fr = flight_map.get((out_fnum, out_trip_date))
+            if fr:
+                out_dep = fr[3]; out_arr = fr[4]; out_flight = fr[2]
+
+        ret_dep = ret_arr = ret_flight = None
+        if ret_trip_date and start_airport and dest_airport and ret_fnum:
+            fr = ret_flight_map.get((ret_fnum, ret_trip_date))
+            if fr:
+                ret_dep = fr[3]; ret_arr = fr[4]; ret_flight = fr[2]
+
         start_city_country = _cached_fetch_city_country(start_airport)
         dest_city_country = _cached_fetch_city_country(dest_airport)
         # Dauer berechnen (Hinflug) mit Zeitzonen
