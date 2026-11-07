@@ -350,10 +350,10 @@ def list_favorites():
     if fav_ids:
         placeholders = ",".join("?" for _ in fav_ids)
         for row in conn.execute(
-            f"SELECT favorite_id, price_outbound, price_return, price_total, currency, fetched_at "
-            f"FROM favorite_trip_prices "
-            f"WHERE favorite_id IN ({placeholders}) "
-            f"AND fetched_at = (SELECT MAX(fetched_at) FROM favorite_trip_prices WHERE favorite_id = favorite_trip_prices.favorite_id)",
+            f"SELECT p.favorite_id, p.price_outbound, p.price_return, p.price_total, p.currency, p.fetched_at "
+            f"FROM favorite_trip_prices p "
+            f"WHERE p.favorite_id IN ({placeholders}) "
+            f"AND p.fetched_at = (SELECT MAX(fetched_at) FROM favorite_trip_prices WHERE favorite_id = p.favorite_id)",
             fav_ids,
         ).fetchall():
             price_map[row[0]] = {
@@ -370,35 +370,32 @@ def list_favorites():
         if r[7] and r[4] and r[1] and r[3]:  # ret_trip_date, start_airport, dest_airport, ret_fnum
             ret_keys.append((r[3], r[7]))
 
+    def _batch_fetch(keys: list[tuple[str, str]], existing_map: dict) -> dict:
+        """Fetch flight details in chunks to avoid SQLite expression-tree limit."""
+        chunk_size = 100
+        for i in range(0, len(keys), chunk_size):
+            chunk = keys[i:i + chunk_size]
+            where_clause = " OR ".join(
+                f"(flight_number = ? AND date(departure_time) = ?)" for _ in chunk
+            )
+            params = [item for pair in chunk for item in pair]
+            for row in conn.execute(
+                f"SELECT flight_number, date(departure_time), airport_icao, destination_icao, flight_number, departure_time, arrival_time "
+                f"FROM flights WHERE {where_clause}",
+                params,
+            ).fetchall():
+                key = (row[0], row[1])  # (flight_number, date)
+                if key not in existing_map:
+                    existing_map[key] = (row[2], row[3], row[4], row[5], row[6])
+        return existing_map
+
     flight_map: dict[tuple[str, str], tuple] = {}
     if out_keys:
-        where_clause = " OR ".join(
-            f"(flight_number = ? AND date(departure_time) = ?)" for _ in out_keys
-        )
-        params = [item for pair in out_keys for item in pair]
-        for row in conn.execute(
-            f"SELECT flight_number, date(departure_time), airport_icao, destination_icao, flight_number, departure_time, arrival_time "
-            f"FROM flights WHERE {where_clause}",
-            params,
-        ).fetchall():
-            key = (row[0], row[1])  # (flight_number, date)
-            if key not in flight_map:
-                flight_map[key] = (row[2], row[3], row[4], row[5], row[6])
+        flight_map = _batch_fetch(out_keys, flight_map)
 
     ret_flight_map: dict[tuple[str, str], tuple] = {}
     if ret_keys:
-        where_clause = " OR ".join(
-            f"(flight_number = ? AND date(departure_time) = ?)" for _ in ret_keys
-        )
-        params = [item for pair in ret_keys for item in pair]
-        for row in conn.execute(
-            f"SELECT flight_number, date(departure_time), airport_icao, destination_icao, flight_number, departure_time, arrival_time "
-            f"FROM flights WHERE {where_clause}",
-            params,
-        ).fetchall():
-            key = (row[0], row[1])  # (flight_number, date)
-            if key not in ret_flight_map:
-                ret_flight_map[key] = (row[2], row[3], row[4], row[5], row[6])
+        ret_flight_map = _batch_fetch(ret_keys, ret_flight_map)
 
     result = []
     for r in rows:
