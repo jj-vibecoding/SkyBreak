@@ -9,7 +9,7 @@ Validates the new UI features before/during implementation:
 - Sidebar drawer: single state, backdrop closes, ESC closes, body-scroll-lock.
 - Trips table header/body cell count consistency (4/4, Actions column with header).
 - ``index.html``: ``<html lang="en">``, no German UI strings in components.
-- AirportsTab feedback: ``tone`` field controls color (success ≠ error).
+- Airport management (merged into FlightsTab) feedback: ``tone`` field controls color (success ≠ error).
 """
 import pathlib
 import re
@@ -30,7 +30,6 @@ MODULES = {
     "SidebarJSX": REPO / "frontend/src/components/CollapsibleSidebar.jsx",
     "TripsTabJS": REPO / "frontend/src/components/TripsTab.js",
     "FlightsTabJS": REPO / "frontend/src/components/FlightsTab.js",
-    "AirportsTabJS": REPO / "frontend/src/components/AirportsTab.js",
     "SettingsTabJS": REPO / "frontend/src/components/SettingsTab.js",
     "FavoritesJS": REPO / "frontend/src/components/FavoriteTripPrices.js",
     "ChartModalJS": REPO / "frontend/src/components/ChartModal.js",
@@ -221,15 +220,15 @@ def test_trips_table_has_actions_column_header():
 
 
 def test_airports_tab_feedback_has_tone_field():
-    """Fix #19: AirportsTab feedback uses explicit tone, not text-matching."""
-    src = MODULES["AirportsTabJS"].read_text()
+    """Fix #19: Airport management (merged into FlightsTab) uses explicit tone, not text-matching."""
+    src = MODULES["FlightsTabJS"].read_text()
     # Must NOT use text.includes('Saved') or similar text-matching
     assert "includes('Saved')" not in src and "includes(\"Saved\")" not in src, (
-        "AirportsTab must not determine feedback color via text.includes('Saved');"
+        "Airport management must not determine feedback color via text.includes('Saved');"
         " use explicit { text, tone } state instead"
     )
     assert "tone" in src, (
-        "AirportsTab must track a 'tone' field for feedback color"
+        "Airport management must track a 'tone' field for feedback color"
     )
 
 
@@ -273,7 +272,6 @@ def test_no_alert_or_confirm_calls_in_components():
         MODULES["AppJS"],
         MODULES["TripsTabJS"],
         MODULES["FlightsTabJS"],
-        MODULES["AirportsTabJS"],
         MODULES["SettingsTabJS"],
         MODULES["FavoritesJS"],
     ]
@@ -431,11 +429,10 @@ def test_no_nesting_a_button():
 
 
 def test_all_tabs_updated_for_responsive_layout():
-    """All 5 tabs must reflect responsive layout changes."""
+    """All 4 remaining tabs must reflect responsive layout changes."""
     tab_files = [
         ("TripsTab", MODULES["TripsTabJS"]),
         ("FlightsTab", MODULES["FlightsTabJS"]),
-        ("AirportsTab", MODULES["AirportsTabJS"]),
         ("SettingsTab", MODULES["SettingsTabJS"]),
         ("Favorites", MODULES["FavoritesJS"]),
     ]

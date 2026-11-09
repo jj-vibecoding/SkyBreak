@@ -8,9 +8,11 @@ def test_app_js_wires_decomposition():
     # App is now a thin shell: it composes the per-tab components + hooks instead
     # of holding all state itself. CollapsibleSidebar was replaced by the
     # responsive drawer (D3) implemented directly in App.js.
-    for name in ["AirportsTab", "FlightsTab",
+    # AirportsTab was merged into FlightsTab.
+    for name in ["FlightsTab",
                  "TripsTab", "FavoriteTripPrices", "SettingsTab", "StatusTab"]:
         assert f"import {name}" in app, f"App.js must import {name}"
+    assert "AirportsTab" not in app, "AirportsTab was merged into FlightsTab and should no longer be imported"
     assert "from './hooks/useActiveTab'" in app
     assert "from './hooks/useAirports'" in app
     # Layout may be imported as a wrapper component (responsive optimization);

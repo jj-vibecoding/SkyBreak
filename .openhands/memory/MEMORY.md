@@ -14,9 +14,11 @@
 - Tests set DB_FILE via conftest BEFORE import (call-time read is required; import-time capture breaks the harness).
 - Dead-import sweep: AST check of skybreak/*.py + tests/*.py should report 0 unused imports.
 
-# Frontend Structure (2026-10-29, Task 4)
-- App.js is now a thin shell (~141 lines, was ~625): routing + responsive sidebar + shared airport list + scrape-status poll.
-- Per-tab components (frontend/src/components/): AirportsTab, FlightsTab (owns flightData), TripsTab, SettingsTab, FavoriteTripPrices (owns ChartModal).
+# Frontend Structure (2026-11-09)
+- App.js is a thin shell: routing + responsive sidebar + shared airport list + scrape-status poll.
+- Nav tabs: Favorites, Search Trips, Flights, Settings, Status (Airports removed — merged into Flights).
+- Per-tab components (frontend/src/components/): FlightsTab (owns flightData + airport management: add/remove/refresh), TripsTab, SettingsTab, FavoriteTripPrices (owns ChartModal).
+- AirportsTab.js exists as dead file; no longer imported anywhere. Airport management is in FlightsTab with add form, remove buttons, and per-airport refresh button.
 - Hooks (frontend/src/hooks/): useActiveTab(NAV) = tab routing, useAirports() = shared list + airportNames.
 - utils/format.js: formatTime + formatTripDateTime (deduped the repeated IIFEs).
 - Dead code removed: FavoriteTrips() def, checkScrape helper, `import Layout` (Layout was imported but NEVER used — pre-existing dead import).

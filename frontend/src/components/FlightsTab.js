@@ -1,5 +1,6 @@
 // D4/D7: Responsive FlightsTab — flex-wrap for status line (Fix #17), 
 //        scroll-x for tables, touch targets ≥44px (Fix #6).
+// Merged AirportsTab: add/remove airports + per-airport refresh at bottom.
 import React, { useState, useEffect } from 'react';
 import { formatTime } from '../utils/format';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -39,7 +40,7 @@ function FlightTable({ title, rows, empty, firstCol, firstLabel }) {
 }
 
 // Flight schedule for a saved airport, per date. Owns its own date/flight data.
-export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
+export default function FlightsTab({ list, setList, onFetchNow, fetchRunning }) {
   const isSmallScreen = useMediaQuery('(max-width: 767px)'); // mobile/tablet
   
   const [flightDate, setFlightDate] = useState(new Date().toISOString().split('T')[0]);
@@ -47,6 +48,11 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
   const [futureInfo, setFutureInfo] = useState({});
   const [expanded, setExpanded] = useState({});
   const toggle = (c) => setExpanded(e => ({ ...e, [c]: !e[c] }));
+
+  // Airport management state
+  const [newCode, setNewCode] = useState('');
+  const [feedback, setFeedback] = useState({ text: '', tone: 'default' });
+  const [refreshingAirports, setRefreshingAirports] = useState({});
 
   useEffect(() => {
     fetch('/api/flights?date=' + flightDate)
@@ -58,8 +64,70 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
       .catch(() => setFlights([]));
   }, [flightDate]);
 
+  // --- Airport management ---
+  const FEEDBACK_COLORS = { default: '#94a3b8', success: '#4ade80', error: '#f87171', info: '#38bdf8' };
+
+  const submitAirport = async (e) => {
+    e.preventDefault();
+    const raw = newCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{3}$/.test(raw)) {
+      setFeedback({ text: 'Invalid IATA code', tone: 'error' });
+      return;
+    }
+    const res = await fetch('/api/airports', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: raw })
+    });
+    if (res.ok) {
+      setFeedback({ text: `Saved: ${raw}`, tone: 'success' });
+      setNewCode('');
+      setList([...list, raw]);
+      window.dispatchEvent(new CustomEvent('showToast', { 
+        detail: { message: `Saved: ${raw}`, type: 'success' } 
+      }));
+    } else {
+      setFeedback({ text: 'Server error', tone: 'error' });
+    }
+  };
+
+  const removeAirport = async (c) => {
+    const res = await fetch('/api/airports/' + c, { method: 'DELETE' });
+    if (res.ok) {
+      setList(list.filter(x => x !== c));
+      setFeedback({ text: `Removed: ${c}`, tone: 'info' });
+      window.dispatchEvent(new CustomEvent('showToast', { 
+        detail: { message: `Removed: ${c}`, type: 'warning' } 
+      }));
+    } else {
+      setFeedback({ text: 'Error removing airport', tone: 'error' });
+    }
+  };
+
+  const refreshAirport = async (code) => {
+    setRefreshingAirports(prev => ({ ...prev, [code]: true }));
+    try {
+      const res = await fetch(`/api/airports/${code}/refresh`, { method: 'POST' });
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent('showToast', { 
+          detail: { message: `Refreshing ${code}…`, type: 'info' } 
+        }));
+      } else {
+        const data = await res.json();
+        window.dispatchEvent(new CustomEvent('showToast', { 
+          detail: { message: data.error || 'Refresh failed', type: 'error' } 
+        }));
+      }
+    } catch {
+      window.dispatchEvent(new CustomEvent('showToast', { 
+        detail: { message: `Failed to refresh ${code}`, type: 'error' } 
+      }));
+    }
+    setRefreshingAirports(prev => ({ ...prev, [code]: false }));
+  };
+
   return (
     <>
+      {/* Date picker + global fetch */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="date" value={flightDate} onChange={e => setFlightDate(e.target.value)}
           className="tap"
@@ -74,6 +142,7 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
         </button>
       </div>
 
+      {/* Flight schedule per airport */}
       {list.map(airport => {
         const arr = flights.filter(f => f.airport_icao === airport && f.direction === 'arrival');
         const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
@@ -106,8 +175,19 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
               }}>
                 {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
               </button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button onClick={() => refreshAirport(airport)} className="tap" disabled={!!refreshingAirports[airport]}
+                  style={{ 
+                    padding: '6px 12px', borderRadius: 8, border: 'none', 
+                    background: refreshingAirports[airport] ? '#475569' : '#6366f1', 
+                    color: '#fff', fontWeight: 600, cursor: refreshingAirports[airport] ? 'not-allowed' : 'pointer', fontSize: 12,
+                  }}
+                  title={`Refresh flights for ${airport}`}>
+                  {refreshingAirports[airport] ? '⟳ Refreshing…' : '⟳'}
+                </button>
+              </div>
               <span style={{ 
-                marginLeft: 10, 
+                marginLeft: isSmallScreen ? 0 : 10, 
                 fontSize: 12, 
                 color: '#38bdf8', 
                 fontWeight: 600,
@@ -137,7 +217,46 @@ export default function FlightsTab({ list, onFetchNow, fetchRunning }) {
           </div>
         );
       })}
-      {!list.length && <div style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</div>}
+      {!list.length && <div style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet. Add one below.</div>}
+
+      {/* ── Saved Airports + Add Airport (merged from AirportsTab) ── */}
+      <div style={{ marginTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+        <h4 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>Saved Airports</h4>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {list.map(c => (
+            <li key={c} style={{
+              background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10
+            }}>
+              <span style={{ fontWeight: 700, color: '#38bdf8', letterSpacing: '0.5px' }}>{c}</span>
+              <button onClick={() => removeAirport(c)} className="tap" style={{
+                background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 6, color: '#f87171',
+                fontSize: 14, cursor: 'pointer', padding: '4px 10px', lineHeight: 1
+              }} title="Remove">×</button>
+            </li>
+          ))}
+          {!list.length && <li style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</li>}
+        </ul>
+
+        {/* Add Airport form */}
+        <div style={{ marginTop: 16 }}>
+          <form onSubmit={submitAirport} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <input value={newCode} maxLength={3} placeholder="LHR"
+              onChange={e => setNewCode(e.target.value.toUpperCase())}
+              style={{
+                flex: '1 1 120px', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
+                background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none'
+              }} />
+            <button type="submit" className="tap" style={{
+              padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+              color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)'
+            }}>Save</button>
+          </form>
+          <p style={{ margin: '10px 0 0', minHeight: 24, color: FEEDBACK_COLORS[feedback.tone], fontSize: 13, fontWeight: 500 }}>
+            {feedback.text}
+          </p>
+        </div>
+      </div>
     </>
   );
 }
