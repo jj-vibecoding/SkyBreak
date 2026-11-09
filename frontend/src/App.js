@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { useMediaQuery, useIsLargeOrAbove } from './hooks/useMediaQuery';
 import { ToastProvider, useConfirm } from './components/Dialogs';
-import AirportsTab from './components/AirportsTab';
 import FlightsTab from './components/FlightsTab';
 import TripsTab from './components/TripsTab';
 import FavoriteTripPrices from './components/FavoriteTripPrices';
@@ -15,7 +14,6 @@ import { useAirports } from './hooks/useAirports';
 const NAV = [
   { key: 'favorites', label: 'Favorites', icon: '⭐' },
   { key: 'trips', label: 'Search Trips', icon: '🧳' },
-  { key: 'airports', label: 'Airports', icon: '✈️' },
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
   { key: 'status', label: 'Status', icon: '📊' },
@@ -24,8 +22,7 @@ const NAV = [
 // Tab-specific header subtitles for compact mobile header (Fix #8)
 const TAB_SUBTITLES = {
   favorites: 'Cheapest routes at a glance',
-  airports: 'Manage saved airports',
-  flights: 'View scheduled flights',
+  flights: 'View & manage flight schedules',
   settings: 'Configure your dashboard',
   status: 'Health dashboard & backups',
 };
@@ -267,10 +264,8 @@ export default function App() {
 
             {tab === 'favorites' && <FavoriteTripPrices />}
 
-            {tab === 'airports' && <AirportsTab list={list} setList={setList} />}
-
             {tab === 'flights' && (
-              <FlightsTab list={list} onFetchNow={handleFetchNow} fetchRunning={scrapeRunning} />
+              <FlightsTab list={list} setList={setList} onFetchNow={handleFetchNow} fetchRunning={scrapeRunning} />
             )}
 
             {tab === 'settings' && <SettingsTab />}

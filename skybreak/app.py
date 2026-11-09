@@ -248,6 +248,28 @@ def fetch_now():
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"fetched": True})
 
+@app.route("/api/airports/<code>/refresh", methods=["POST"])
+def refresh_airport_flights(code):
+    """Scrape flight schedule for a single airport."""
+    code = code.strip().upper()
+    if not validate_iata(code):
+        return jsonify({"error": "Invalid IATA"}), 400
+    global _scrape_in_progress
+    with _scrape_lock:
+        if _scrape_in_progress:
+            return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+        _scrape_in_progress = True
+    from skybreak.scraper_job import scrape_single_airport
+    def _run():
+        global _scrape_in_progress
+        try:
+            scrape_single_airport(code)
+        finally:
+            with _scrape_lock:
+                _scrape_in_progress = False
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"fetched": True})
+
 @app.route("/api/flights/scrape-status", methods=["GET"])
 def scrape_status():
     global _scrape_in_progress

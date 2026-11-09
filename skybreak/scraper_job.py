@@ -75,6 +75,34 @@ def _save_kayak(airport, flights, month):
     conn.commit()
     conn.close()
 
+def scrape_single_airport(airport_code):
+    """Scrape flight schedule for a single airport (no run-log row)."""
+    apply_migrations()
+    max_raw = get_setting("fetch_max_months") or get_setting("fetch_max_days") or "3"
+    try:
+        max_months = int(max_raw)
+    except Exception:
+        max_months = 3
+    max_months = max(1, min(max_months, 12))
+    now = datetime.now()
+    months = sorted({(now + timedelta(days=30*i)).strftime("%Y-%m") for i in range(max_months)})
+
+    airport = airport_code.upper()
+    total_saved = 0
+    try:
+        for month in months:
+            logger.info("Kayak fetch %s %s (single)", airport, month)
+            _clear_month(airport, month)
+            res = _run_kayak(airport, month)
+            flights = _import_kayak_json(airport)
+            _save_kayak(airport, flights, month)
+            total_saved += len(flights)
+            logger.info("Saved %d flights for %s %s", len(flights), airport, month)
+    except Exception as e:
+        logger.warning("scrape_single_airport %s error: %s", airport, e)
+    return total_saved
+
+
 def scrape_all_airports():
     """Scrape all airports and log the run in ``scrape_runs``."""
     # Schema is owned by the versioned migration; ensure it before scraping.

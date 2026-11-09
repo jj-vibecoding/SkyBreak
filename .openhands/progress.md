@@ -1,11 +1,13 @@
 # Goal
-Review SkyBreak project and propose next features (advisory only, no code changes).
+Fix N+1 query performance issue on the favorites page (`GET /api/favorites`).
 
 ## Done
-- Reviewed README, doc/architecture.md, doc/user-stories.md (14 stories implemented; "Telegram Notifications" was listed as future but removed in last cleanup).
-- Reviewed backend: app.py routes (airports, flights, prices, favorites, settings, trip-configs, turnarounds), db_migrate.py at v13.
-- Reviewed frontend components/hooks; confirmed TripsTab results show NO prices (only favorites get price tracking) — real UX gap.
-- No notification code exists yet (no telegram/smtp anywhere).
+- Identified root cause in `skybreak/app.py` `list_favorites()`: for each of N favorites, 1 price query + up to 2 flight detail queries = 3N+1 queries total.
+- Replaced per-row queries with batch IN-clause queries:
+  - 1 batch query for all favorites' latest prices (correlated MAX subquery)
+  - 2 batch queries for outbound/return flight details (unique flight_number+date pairs)
+- Total reduced from O(N) to O(1) queries regardless of favorites count.
+- All 195 pytest tests pass, 2 skipped; frontend `npm run build` clean.
 
 ## Open
 - Delivered feature proposals to user; user picked features 1, 2, 6 (rejected 3, 4, 5, 7).
