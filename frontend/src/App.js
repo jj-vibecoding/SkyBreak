@@ -13,8 +13,8 @@ import { useActiveTab } from './hooks/useActiveTab';
 import { useAirports } from './hooks/useAirports';
 
 const NAV = [
-  { key: 'trips', label: 'Trips', icon: '🧳' },
   { key: 'favorites', label: 'Favorites', icon: '⭐' },
+  { key: 'trips', label: 'Search Trips', icon: '🧳' },
   { key: 'airports', label: 'Airports', icon: '✈️' },
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
@@ -23,7 +23,6 @@ const NAV = [
 
 // Tab-specific header subtitles for compact mobile header (Fix #8)
 const TAB_SUBTITLES = {
-  trips: 'Search & manage your trips',
   favorites: 'Cheapest routes at a glance',
   airports: 'Manage saved airports',
   flights: 'View scheduled flights',

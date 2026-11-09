@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 const VALID_KEYS = new Set(['trips', 'favorites', 'airports', 'flights', 'settings']);
 
 export function useActiveTab(navKeys) {
-  const [tab, setTab] = useState('trips');
+  const [tab, setTab] = useState('favorites');
   useEffect(() => {
     const handlePop = () => {
       const pathTab = window.location.pathname.replace(/^\//, '');
