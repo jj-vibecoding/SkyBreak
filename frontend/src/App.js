@@ -43,7 +43,7 @@ export default function App() {
   const isMediumOrAbove = useMediaQuery('(min-width: 768px)');
   
   // Single source of truth: drawerOpen (only relevant when NOT large)
-  const [drawerOpen, setDrawerOpen] = useState(!isLarge);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   
   const { list, setList, airportNames } = useAirports();
   const [scrapeRunning, setScrapeRunning] = useState(false);
@@ -53,9 +53,8 @@ export default function App() {
   useEffect(() => {
     if (isLarge) {
       setDrawerOpen(false); // Desktop: sidebar always visible
-    } else {
-      setDrawerOpen(true); // Mobile: start open
     }
+    // Mobile: keep user's last choice (default closed)
   }, [isLarge]);
 
   // --- D3: ESC closes drawer + body scroll lock + safe-area-inset ---
