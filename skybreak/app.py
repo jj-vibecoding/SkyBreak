@@ -338,17 +338,39 @@ def delete_trip_config(name):
 def create_favorite():
     data = request.get_json() or {}
     conn = connect_db()
-    conn.execute("INSERT OR IGNORE INTO favorite_trips (destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date) VALUES (?, ?, ?, ?, ?, ?)", (
-        data.get("destination_airport") or "",
-        data.get("outbound_flight_number") or "",
-        data.get("return_flight_number") or "",
-        data.get("start_airport") or "",
-        data.get("trip_date") or data.get("outbound_trip_date") or "",
-        data.get("return_trip_date") or ""
-    ))
+
+    # Look up existing favorite first (unique index ensures at most one match)
+    existing = conn.execute(
+        "SELECT id FROM favorite_trips WHERE destination_airport=? AND outbound_flight_number=? AND return_flight_number=? AND start_airport=? AND outbound_trip_date=? AND return_trip_date=?",
+        (
+            data.get("destination_airport") or "",
+            data.get("outbound_flight_number") or "",
+            data.get("return_flight_number") or "",
+            data.get("start_airport") or "",
+            data.get("trip_date") or data.get("outbound_trip_date") or "",
+            data.get("return_trip_date") or ""
+        )
+    ).fetchone()
+
+    if existing:
+        conn.close()
+        return jsonify({"id": existing[0], "created": False}), 200
+
+    cursor = conn.execute(
+        "INSERT INTO favorite_trips (destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            data.get("destination_airport") or "",
+            data.get("outbound_flight_number") or "",
+            data.get("return_flight_number") or "",
+            data.get("start_airport") or "",
+            data.get("trip_date") or data.get("outbound_trip_date") or "",
+            data.get("return_trip_date") or ""
+        )
+    )
+    fav_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    return jsonify({"created": True}), 201
+    return jsonify({"id": fav_id, "created": True}), 201
 
 
 # Batch helper (weiter optimieren)
