@@ -2,7 +2,8 @@
 favorite columns dropped, unique index recreated, idempotency, and a clean
 script run. v13 adds trip_search_configs; v14 adds trip_price_quotes for
 on-demand price quotes in TripsTab; v15 adds scrape_runs + price_runs for
-the health dashboard.
+the health dashboard; v17 ensures the unique index on favorite_trips exists
+and cleans up any duplicates.
 """
 import os
 import pathlib
@@ -37,7 +38,7 @@ def _version(db):
 def test_fresh_db_reaches_latest(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
-    assert _version(db) == 16
+    assert _version(db) == 17
 
 
 def test_v11_drops_stale_columns(tmp_path):
@@ -56,6 +57,45 @@ def test_v11_recreates_unique_index(tmp_path):
     conn.close()
     assert "idx_favorite_unique" in idx
 
+
+def test_v17_cleans_duplicates_and_recreates_index(tmp_path):
+    """v17 must remove duplicate favorite rows and create the unique index."""
+    db = _fresh_db(tmp_path)
+
+    # Simulate a v16 DB where the unique index was lost (the broken production state).
+    m.apply_migrations(db)
+    conn = sqlite3.connect(db)
+    conn.execute("DROP INDEX IF EXISTS idx_favorite_unique")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (16)")
+
+    # Insert duplicate rows — without the unique index this is allowed.
+    conn.execute(
+        "INSERT INTO favorite_trips (destination_airport, outbound_flight_number, "
+        "return_flight_number, start_airport, outbound_trip_date, return_trip_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("FRA", "LH1234", "LH5678", "BUD", "2027-06-01", "2027-06-10")
+    )
+    conn.execute(
+        "INSERT INTO favorite_trips (destination_airport, outbound_flight_number, "
+        "return_flight_number, start_airport, outbound_trip_date, return_trip_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("FRA", "LH1234", "LH5678", "BUD", "2027-06-01", "2027-06-10")  # dup
+    )
+    conn.commit()
+    assert conn.execute("SELECT COUNT(*) FROM favorite_trips").fetchone()[0] == 2
+
+    # Re-run migrations — v17 should deduplicate and add the unique index
+    m.apply_migrations(db)
+    assert _version(db) == 17
+
+    conn = sqlite3.connect(db)
+    # Only one row should remain (the one with higher id)
+    assert conn.execute("SELECT COUNT(*) FROM favorite_trips").fetchone()[0] == 1
+    # Unique index must exist
+    idx = {r[1] for r in conn.execute("PRAGMA index_list(favorite_trips)")}
+    assert "idx_favorite_unique" in idx
+    conn.close()
 
 def test_fresh_db_has_full_flights_schema(tmp_path):
     # Schema is owned by db_migrate, not by runtime mutation in the scraper:
@@ -84,7 +124,7 @@ def test_partial_v11_db_upgraded_to_latest(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 16
+    assert _version(db) == 17
     cols = _cols(db, "flights")
     for c in ("flight_date", "arrival_date", "departure", "arrival", "month_key"):
         assert c in cols, f"{c} should be added by v12"
@@ -102,7 +142,7 @@ def test_v13_db_upgraded_to_v14(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 16
+    assert _version(db) == 17
     cols = _cols(db, "trip_search_configs")
     assert {"id", "name", "start_weekdays", "max_trip_days"} <= cols
     conn = sqlite3.connect(db)
@@ -121,7 +161,7 @@ def test_v14_creates_trip_price_quotes_table(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 16
+    assert _version(db) == 17
     # Verify the new table exists with expected columns
     cols = _cols(db, "trip_price_quotes")
     for c in ("start_airport", "destination_airport", "outbound_date",
@@ -138,7 +178,7 @@ def test_migration_is_idempotent(tmp_path):
     db = _fresh_db(tmp_path)
     m.apply_migrations(db)
     m.apply_migrations(db)  # must not raise on a second run
-    assert _version(db) == 16
+    assert _version(db) == 17
 
 
 def test_migrate_runs_as_script(tmp_path):
@@ -153,7 +193,7 @@ def test_migrate_runs_as_script(tmp_path):
         cwd=str(pathlib.Path.cwd()),
     )
     assert res.returncode == 0, f"stderr: {res.stderr}"
-    assert _version(db) == 16
+    assert _version(db) == 17
 
 
 def test_v15_creates_run_log_tables(tmp_path):
@@ -167,7 +207,7 @@ def test_v15_creates_run_log_tables(tmp_path):
     conn.commit()
     conn.close()
     m.apply_migrations(db)
-    assert _version(db) == 16
+    assert _version(db) == 17
     # Verify both new tables exist with expected columns
     scrape_cols = _cols(db, "scrape_runs")
     for c in ("started_at", "finished_at", "status", "airports", "flights_saved"):

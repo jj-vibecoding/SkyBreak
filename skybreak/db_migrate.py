@@ -379,11 +379,53 @@ def migration_v16(conn):
     _bump(conn, 16)
 
 
+def migration_v17(conn):
+    """Ensure the unique index on favorite_trips exists and clean up duplicates.
+
+    The idx_favorite_unique index was lost during earlier migrations. This step
+    removes older duplicate rows (keeping the one with the highest id per group)
+    so the unique constraint can be safely created.
+    """
+    cols = _favorite_cols(conn)
+    if not cols:
+        _bump(conn, 17)
+        return
+
+    key_cols = [c for c in
+                ("destination_airport", "outbound_flight_number", "return_flight_number",
+                 "start_airport", "outbound_trip_date", "return_trip_date")
+                if c in cols]
+
+    if not key_cols:
+        _bump(conn, 17)
+        return
+
+    placeholders = ", ".join("?" for _ in key_cols)
+    col_list = ", ".join(key_cols)
+
+    # 1. Identify duplicates — keep the row with the highest id per group
+    conn.execute(
+        f"DELETE FROM favorite_trips WHERE id NOT IN ("
+        f"  SELECT MAX(id) FROM favorite_trips "
+        f"  GROUP BY {col_list}"
+        f")"
+    )
+
+    # 2. Create (or recreate) the unique index so future duplicates are rejected
+    conn.execute(
+        f"CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_unique ON favorite_trips "
+        f"({col_list})"
+    )
+
+    conn.commit()
+    _bump(conn, 17)
+
+
 MIGRATIONS = [
     migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
     migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
     migration_v11, migration_v12, migration_v13, migration_v14, migration_v15,
-    migration_v16,
+    migration_v16, migration_v17,
 ]
 
 
